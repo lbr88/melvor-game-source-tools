@@ -36,6 +36,7 @@ function parseArgs(argv) {
     includeDisabled: false,
     linkedModId: null,
     localModId: null,
+    modioRecovery: 'local',
     modId: null,
     modPath: '',
     mode: 'list',
@@ -47,6 +48,7 @@ function parseArgs(argv) {
     profileId: '',
     reportDir: process.env.MELVOR_REPORTS_DIR || path.join(REPO_ROOT, DEFAULT_REPORTS_DIR),
     replace: false,
+    cleanup: true,
     screenshot: true,
     storageState: process.env.MELVOR_BROWSER_STORAGE_STATE || '',
     timeoutMs: 90000,
@@ -74,6 +76,8 @@ function parseArgs(argv) {
     else if (arg.startsWith('--linked-mod-id=')) options.linkedModId = Number.parseInt(arg.slice('--linked-mod-id='.length), 10);
     else if (arg === '--local-mod-id') options.localModId = Number.parseInt(nextValue(), 10);
     else if (arg.startsWith('--local-mod-id=')) options.localModId = Number.parseInt(arg.slice('--local-mod-id='.length), 10);
+    else if (arg === '--modio-recovery') options.modioRecovery = nextValue();
+    else if (arg.startsWith('--modio-recovery=')) options.modioRecovery = arg.slice('--modio-recovery='.length);
     else if (arg === '--mod-id') options.modId = Number.parseInt(nextValue(), 10);
     else if (arg.startsWith('--mod-id=')) options.modId = Number.parseInt(arg.slice('--mod-id='.length), 10);
     else if (arg === '--mod-path') options.modPath = nextValue();
@@ -94,6 +98,7 @@ function parseArgs(argv) {
     else if (arg === '--report-dir') options.reportDir = nextValue();
     else if (arg.startsWith('--report-dir=')) options.reportDir = arg.slice('--report-dir='.length);
     else if (arg === '--replace') options.replace = true;
+    else if (arg === '--no-cleanup') options.cleanup = false;
     else if (arg === '--no-screenshot') options.screenshot = false;
     else if (arg === '--storage-state') options.storageState = nextValue();
     else if (arg.startsWith('--storage-state=')) options.storageState = arg.slice('--storage-state='.length);
@@ -114,6 +119,7 @@ function parseArgs(argv) {
   }
 
   if (!['list', 'fetch', 'profile', 'local'].includes(options.mode)) throw new Error(`Unknown mode: ${options.mode}`);
+  if (!['fail', 'local', 'reload'].includes(options.modioRecovery)) throw new Error(`Unknown mod.io recovery mode: ${options.modioRecovery}`);
   for (const key of ['timeoutMs', 'waitMs']) {
     if (!Number.isFinite(options[key]) || options[key] < 0) throw new Error(`${key} must be zero or greater`);
   }
@@ -144,10 +150,12 @@ Options:
   --name <name>            Display name for Creator Toolkit local mod add.
   --linked-mod-id <id>     Optional mod.io id linked to a Creator Toolkit local mod.
   --directory-path <path>  Preserve a directory-link path in Creator Toolkit metadata.
+  --modio-recovery <mode>  Handle mod.io unreachable prompts: local, reload, or fail. Default: local.
   --apply                  Persist the requested mutation. Without this, mutations are dry-run.
   --no-persist             Update browser localStorage only instead of PlayFab account data.
   --report-dir <dir>       Output directory for screenshots/reports. Defaults to ${DEFAULT_REPORTS_DIR}/
   --replace                Replace matching local mod when adding.
+  --no-cleanup             Keep test local mod after verify_load.
   --no-screenshot          Do not save a Playwright page screenshot/report.
   --disabled               Add a Creator Toolkit local mod disabled.
   --username <username>    Melvor Cloud username. Defaults to MELVOR_CLOUD_USERNAME.
@@ -171,6 +179,65 @@ function authUrlFor(url) {
 async function gotoAndSettle(page, url, timeoutMs) {
   await page.goto(url, { timeout: timeoutMs, waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle', { timeout: timeoutMs }).catch(() => {});
+}
+
+async function readModioUnreachablePrompt(page) {
+  return await page
+    .evaluate(() => {
+      const popup = document.querySelector('.swal2-popup');
+      if (!popup) return { present: false };
+      const style = window.getComputedStyle(popup);
+      const visible = style.display !== 'none' && style.visibility !== 'hidden' && !popup.classList.contains('swal2-hide');
+      const title = document.querySelector('.swal2-title')?.textContent?.trim() || '';
+      const body = document.querySelector('.swal2-html-container')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+      const text = `${title}\n${body}`.trim();
+      return {
+        present: Boolean(visible && /mod\.io unreachable|mod\.io service cannot be reached/i.test(text)),
+        title,
+        text,
+      };
+    })
+    .catch(() => ({ present: false }));
+}
+
+async function handleModioUnreachablePrompt(page, options) {
+  const prompt = await readModioUnreachablePrompt(page);
+  if (!prompt.present) return null;
+
+  const action = options.modioRecovery;
+  const event = {
+    action,
+    title: prompt.title,
+    text: prompt.text,
+    observedAt: new Date().toISOString(),
+  };
+  options.modioRecoveryActions = [...(options.modioRecoveryActions || []), event];
+
+  if (action === 'fail') {
+    throw new Error(`mod.io unreachable prompt is open: ${prompt.text}`);
+  }
+
+  const buttonSelector = action === 'reload' ? '.swal2-confirm' : '.swal2-deny';
+  await page.locator(buttonSelector).click({ timeout: 5000 });
+  if (action === 'reload') {
+    await page.waitForLoadState('domcontentloaded', { timeout: options.timeoutMs }).catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: options.timeoutMs }).catch(() => {});
+  } else {
+    await page
+      .waitForFunction(
+        () => {
+          const popup = document.querySelector('.swal2-popup');
+          if (!popup) return true;
+          const style = window.getComputedStyle(popup);
+          return style.display === 'none' || style.visibility === 'hidden' || popup.classList.contains('swal2-hide');
+        },
+        undefined,
+        { timeout: 10000 }
+      )
+      .catch(() => {});
+    await page.waitForTimeout(1000).catch(() => {});
+  }
+  return event;
 }
 
 async function isLoggedIn(page) {
@@ -227,25 +294,36 @@ async function loginIfNeeded(page, options) {
   return { attempted: true, ok: true, reason: 'logged in' };
 }
 
-async function waitForModManager(page, options) {
-  await gotoAndSettle(page, options.url, options.timeoutMs);
-  await page.waitForFunction(
-    () =>
-      Boolean(
-        typeof mod !== 'undefined' &&
-          mod.manager &&
-          typeof mod.manager.getLoadedModList === 'function' &&
-          typeof globalThis.indexedDB === 'object'
-      ),
-    undefined,
-    { timeout: options.timeoutMs }
-  );
-  await page
-    .waitForFunction(() => typeof mod === 'undefined' || !mod.manager?.isProcessing?.(), undefined, {
-      timeout: Math.min(options.timeoutMs, 30000),
-    })
-    .catch(() => {});
-  if (options.waitMs > 0) await page.waitForTimeout(options.waitMs);
+async function waitForModManager(page, options, { navigate = true } = {}) {
+  if (navigate) await gotoAndSettle(page, options.url, options.timeoutMs);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.waitForFunction(
+      () =>
+        Boolean(
+          typeof mod !== 'undefined' &&
+            mod.manager &&
+            typeof mod.manager.getLoadedModList === 'function' &&
+            typeof globalThis.indexedDB === 'object'
+        ),
+      undefined,
+      { timeout: options.timeoutMs }
+    );
+
+    const earlyRecovery = await handleModioUnreachablePrompt(page, options);
+    if (earlyRecovery?.action === 'reload') continue;
+
+    await page
+      .waitForFunction(() => typeof mod === 'undefined' || !mod.manager?.isProcessing?.(), undefined, {
+        timeout: Math.min(options.timeoutMs, 30000),
+      })
+      .catch(() => {});
+    if (options.waitMs > 0) await page.waitForTimeout(options.waitMs);
+
+    const lateRecovery = await handleModioUnreachablePrompt(page, options);
+    if (lateRecovery?.action === 'reload') continue;
+    return;
+  }
+  throw new Error('mod.io unreachable prompt kept reappearing after recovery attempts.');
 }
 
 function isNavigationContextError(error) {
@@ -253,34 +331,149 @@ function isNavigationContextError(error) {
   return /Execution context was destroyed|Cannot find context with specified id|navigation/i.test(message);
 }
 
+function withTimeout(promise, timeoutMs, label) {
+  let timeout;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeout = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeout));
+}
+
 async function retryAfterNavigation(page, options, callback) {
   let lastError;
   for (let attempt = 0; attempt < 4; attempt += 1) {
     try {
-      return await callback();
+      return await withTimeout(callback(), Math.min(options.timeoutMs, 30000), 'Browser page operation');
     } catch (error) {
       if (!isNavigationContextError(error)) throw error;
       lastError = error;
       await page.waitForTimeout(1000).catch(() => {});
-      await waitForModManager(page, options);
+      await waitForModManager(page, options, { navigate: false });
     }
   }
   throw lastError;
+}
+
+async function waitForLoadedModName(page, options, modName, label = modName, timeoutMs = Math.min(options.timeoutMs, 60000)) {
+  const deadline = Date.now() + timeoutMs;
+  let lastLoadedNames = [];
+  while (Date.now() < deadline) {
+    const recovery = await handleModioUnreachablePrompt(page, options);
+    if (recovery?.action === 'reload') await waitForModManager(page, options, { navigate: false });
+    const state = await page
+      .evaluate((name) => {
+        const loadedNames = typeof mod !== 'undefined' ? mod.manager?.getLoadedModList?.() || [] : [];
+        return { loaded: loadedNames.includes(name), loadedNames };
+      }, modName)
+      .catch(() => ({ loaded: false, loadedNames: [] }));
+    lastLoadedNames = state.loadedNames;
+    if (state.loaded) return state;
+    await page.waitForTimeout(1000).catch(() => {});
+  }
+  throw new Error(`Timed out waiting for ${label} to load. Loaded mods: ${lastLoadedNames.join(', ') || '(none)'}`);
+}
+
+async function waitForCreatorToolkitForVerify(page, options, label) {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await waitForLoadedModName(page, options, 'Creator Toolkit', `${label} (attempt ${attempt + 1})`, Math.min(options.timeoutMs, 30000));
+    } catch (error) {
+      lastError = error;
+      if (attempt >= 2) break;
+      options.verifyLoadRetries = [
+        ...(options.verifyLoadRetries || []),
+        {
+          label,
+          attempt: attempt + 1,
+          reason: error instanceof Error ? error.message : String(error),
+          retriedAt: new Date().toISOString(),
+        },
+      ];
+      await waitForModManager(page, { ...options, waitMs: Math.max(options.waitMs, 5000) });
+    }
+  }
+  throw lastError;
+}
+
+async function waitForLocalModSignal(page, options, { localModName, namespace }, timeoutMs = Math.min(options.timeoutMs, 60000)) {
+  const deadline = Date.now() + timeoutMs;
+  let lastState = null;
+  while (Date.now() < deadline) {
+    const recovery = await handleModioUnreachablePrompt(page, options);
+    if (recovery?.action === 'reload') await waitForModManager(page, options, { navigate: false });
+    lastState = await page
+      .evaluate(
+        ({ localModName, namespace }) => {
+          function contextExists(value) {
+            if (!value || typeof mod === 'undefined' || !mod.getContext) return false;
+            try {
+              mod.getContext(value);
+              return true;
+            } catch {
+              return false;
+            }
+          }
+
+          const loadedNames = typeof mod !== 'undefined' ? mod.manager?.getLoadedModList?.() || [] : [];
+          const marker = globalThis.__mcpLocalModSmokeLoaded || null;
+          const loadedByName = localModName ? loadedNames.includes(localModName) : false;
+          const loadedByNamespace = contextExists(namespace);
+          const loadedByMarker = marker && (!namespace || marker.namespace === namespace);
+          return {
+            loaded: Boolean(loadedByMarker || loadedByNamespace || loadedByName),
+            loadedByMarker: Boolean(loadedByMarker),
+            loadedByNamespace,
+            loadedByName,
+            loadedNames,
+            marker,
+          };
+        },
+        { localModName, namespace }
+      )
+      .catch(() => ({ loaded: false, loadedNames: [], marker: null }));
+    if (lastState.loaded) return lastState;
+    await page.waitForTimeout(1000).catch(() => {});
+  }
+  return lastState || { loaded: false, loadedNames: [], marker: null };
 }
 
 async function collectModManagerState(page, includeResources) {
   return await page.evaluate(async ({ includeResources }) => {
     function getAllFromIndexedDB(dbName, storeName) {
       return new Promise((resolve, reject) => {
+        let db;
+        let settled = false;
+        const timeout = setTimeout(() => finish(reject, new Error(`Timed out reading IndexedDB ${dbName}.${storeName}`)), 10000);
+        function finish(callback, value) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          try {
+            db?.close();
+          } catch {}
+          callback(value);
+        }
+
         const request = indexedDB.open(dbName);
-        request.onerror = () => reject(request.error);
+        request.onerror = () => finish(reject, request.error);
+        request.onblocked = () => finish(reject, new Error(`Blocked opening IndexedDB ${dbName}.${storeName}`));
         request.onsuccess = () => {
-          const db = request.result;
-          const tx = db.transaction(storeName, 'readonly');
+          db = request.result;
+          db.onversionchange = () => db.close();
+          let tx;
+          try {
+            tx = db.transaction(storeName, 'readonly');
+          } catch (error) {
+            finish(reject, error);
+            return;
+          }
           const store = tx.objectStore(storeName);
           const getAll = store.getAll();
-          getAll.onerror = () => reject(getAll.error);
-          getAll.onsuccess = () => resolve(getAll.result || []);
+          getAll.onerror = () => finish(reject, getAll.error);
+          getAll.onsuccess = () => finish(resolve, getAll.result || []);
+          tx.onabort = () => finish(reject, tx.error || new Error(`Aborted reading IndexedDB ${dbName}.${storeName}`));
+          tx.onerror = () => finish(reject, tx.error);
         };
       });
     }
@@ -464,6 +657,7 @@ async function attachBrowserReport(page, result, options) {
   await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {});
   const report = {
     ...result,
+    browserEvents: options.browserEvents || [],
     reportDir,
     screenshotPath,
     capturedAt: new Date().toISOString(),
@@ -483,6 +677,7 @@ async function captureFailureScreenshot(page, options, error) {
       ok: false,
       mode: options.mode,
       error: error instanceof Error ? error.message : String(error),
+      browserEvents: options.browserEvents || [],
       reportDir,
       screenshotPath,
       capturedAt: new Date().toISOString(),
@@ -852,10 +1047,12 @@ async function manageCreatorToolkitLocalMods(page, options, localInput = null) {
     enable: 'enable',
     list: 'list',
     remove: 'remove',
+    verify_load: 'verify_load',
   };
   const operation = operationAliases[options.operation];
   if (!operation) throw new Error(`Unknown Creator Toolkit local mod operation: ${options.operation}`);
-  if (operation === 'add' && !localInput) throw new Error('Creator Toolkit add requires --mod-path.');
+  if (['add', 'verify_load'].includes(operation) && !localInput) throw new Error(`Creator Toolkit ${operation} requires --mod-path.`);
+  if (operation === 'verify_load' && !options.apply) throw new Error('Creator Toolkit verify_load requires --apply because it writes a temporary local mod.');
   if (['enable', 'disable', 'remove'].includes(operation) && !Number.isInteger(options.localModId)) {
     throw new Error(`Creator Toolkit ${operation} requires --local-mod-id.`);
   }
@@ -864,52 +1061,120 @@ async function manageCreatorToolkitLocalMods(page, options, localInput = null) {
     async ({ apply, localInput, localModId, operation }) => {
       function getAllFromIndexedDB(dbName, storeName) {
         return new Promise((resolve, reject) => {
+          let db;
+          let settled = false;
+          const timeout = setTimeout(() => finish(reject, new Error(`Timed out reading IndexedDB ${dbName}.${storeName}`)), 10000);
+          function finish(callback, value) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            try {
+              db?.close();
+            } catch {}
+            callback(value);
+          }
+
           const request = indexedDB.open(dbName);
-          request.onerror = () => reject(request.error);
+          request.onerror = () => finish(reject, request.error);
+          request.onblocked = () => finish(reject, new Error(`Blocked opening IndexedDB ${dbName}.${storeName}`));
           request.onsuccess = () => {
-            const db = request.result;
-            const tx = db.transaction(storeName, 'readonly');
+            db = request.result;
+            db.onversionchange = () => db.close();
+            let tx;
+            try {
+              tx = db.transaction(storeName, 'readonly');
+            } catch (error) {
+              finish(reject, error);
+              return;
+            }
             const store = tx.objectStore(storeName);
             const getAll = store.getAll();
-            getAll.onerror = () => reject(getAll.error);
+            getAll.onerror = () => finish(reject, getAll.error);
             getAll.onsuccess = () => {
-              db.close();
-              resolve(getAll.result || []);
+              finish(resolve, getAll.result || []);
             };
+            tx.onabort = () => finish(reject, tx.error || new Error(`Aborted reading IndexedDB ${dbName}.${storeName}`));
+            tx.onerror = () => finish(reject, tx.error);
           };
         });
       }
 
       function putInIndexedDB(dbName, storeName, value) {
         return new Promise((resolve, reject) => {
+          let db;
+          let result;
+          let settled = false;
+          const timeout = setTimeout(() => finish(reject, new Error(`Timed out writing IndexedDB ${dbName}.${storeName}`)), 15000);
+          function finish(callback, output) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            try {
+              db?.close();
+            } catch {}
+            callback(output);
+          }
+
           const request = indexedDB.open(dbName);
-          request.onerror = () => reject(request.error);
+          request.onerror = () => finish(reject, request.error);
+          request.onblocked = () => finish(reject, new Error(`Blocked opening IndexedDB ${dbName}.${storeName}`));
           request.onsuccess = () => {
-            const db = request.result;
-            const tx = db.transaction(storeName, 'readwrite');
+            db = request.result;
+            db.onversionchange = () => db.close();
+            let tx;
+            try {
+              tx = db.transaction(storeName, 'readwrite');
+            } catch (error) {
+              finish(reject, error);
+              return;
+            }
             const store = tx.objectStore(storeName);
             const put = store.put(value);
-            put.onerror = () => reject(put.error);
-            put.onsuccess = () => resolve(put.result);
-            tx.oncomplete = () => db.close();
-            tx.onerror = () => reject(tx.error);
+            put.onerror = () => finish(reject, put.error);
+            put.onsuccess = () => {
+              result = put.result;
+            };
+            tx.oncomplete = () => finish(resolve, result);
+            tx.onabort = () => finish(reject, tx.error || new Error(`Aborted writing IndexedDB ${dbName}.${storeName}`));
+            tx.onerror = () => finish(reject, tx.error);
           };
         });
       }
 
       function deleteFromIndexedDB(dbName, storeName, key) {
         return new Promise((resolve, reject) => {
+          let db;
+          let settled = false;
+          const timeout = setTimeout(() => finish(reject, new Error(`Timed out deleting from IndexedDB ${dbName}.${storeName}`)), 15000);
+          function finish(callback, value) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            try {
+              db?.close();
+            } catch {}
+            callback(value);
+          }
+
           const request = indexedDB.open(dbName);
-          request.onerror = () => reject(request.error);
+          request.onerror = () => finish(reject, request.error);
+          request.onblocked = () => finish(reject, new Error(`Blocked opening IndexedDB ${dbName}.${storeName}`));
           request.onsuccess = () => {
-            const db = request.result;
-            const tx = db.transaction(storeName, 'readwrite');
+            db = request.result;
+            db.onversionchange = () => db.close();
+            let tx;
+            try {
+              tx = db.transaction(storeName, 'readwrite');
+            } catch (error) {
+              finish(reject, error);
+              return;
+            }
             const store = tx.objectStore(storeName);
             const deletion = store.delete(key);
-            deletion.onerror = () => reject(deletion.error);
-            deletion.onsuccess = () => resolve(true);
-            tx.oncomplete = () => db.close();
-            tx.onerror = () => reject(tx.error);
+            deletion.onerror = () => finish(reject, deletion.error);
+            tx.oncomplete = () => finish(resolve, true);
+            tx.onabort = () => finish(reject, tx.error || new Error(`Aborted deleting from IndexedDB ${dbName}.${storeName}`));
+            tx.onerror = () => finish(reject, tx.error);
           };
         });
       }
@@ -1098,8 +1363,7 @@ async function manageCreatorToolkitLocalMods(page, options, localInput = null) {
             )) ||
           null;
 
-        return {
-          id: existing ? existing.id : undefined,
+        const record = {
           name: displayName,
           mod: modRecord,
           dir: input.directoryPath || '',
@@ -1108,6 +1372,8 @@ async function manageCreatorToolkitLocalMods(page, options, localInput = null) {
           loadPriority: existing?.loadPriority ?? nextPriority,
           disabled: Boolean(input.disabled),
         };
+        if (existing) record.id = existing.id;
+        return record;
       }
 
       const localMods = await getAllFromIndexedDB('melvordb', 'localMods');
@@ -1197,13 +1463,177 @@ async function manageCreatorToolkitLocalMods(page, options, localInput = null) {
   );
 }
 
+async function verifyCreatorToolkitLocalModLoad(page, options, localInput) {
+  await waitForCreatorToolkitForVerify(page, options, 'Creator Toolkit before adding the local mod');
+  const added = await retryAfterNavigation(page, options, () =>
+    manageCreatorToolkitLocalMods(page, { ...options, operation: 'verify_load', apply: true }, localInput)
+  );
+  const localModId = added.localMod?.id;
+  const localModName = added.localMod?.name || null;
+  const namespace = added.localMod?.mod?.namespace || null;
+  let cleanup = null;
+  let verification = null;
+
+  try {
+    await waitForModManager(page, { ...options, waitMs: Math.max(options.waitMs, 5000) });
+    await waitForCreatorToolkitForVerify(page, options, 'Creator Toolkit after reloading with the local mod');
+    await waitForLocalModSignal(page, options, { localModName, namespace });
+    verification = await retryAfterNavigation(page, options, () =>
+      page.evaluate(
+        async ({ localModId, localModName, namespace }) => {
+          function getAllFromIndexedDB(dbName, storeName) {
+            return new Promise((resolve, reject) => {
+              let db;
+              let settled = false;
+              const timeout = setTimeout(() => finish(reject, new Error(`Timed out reading IndexedDB ${dbName}.${storeName}`)), 10000);
+              function finish(callback, value) {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                try {
+                  db?.close();
+                } catch {}
+                callback(value);
+              }
+
+              const request = indexedDB.open(dbName);
+              request.onerror = () => finish(reject, request.error);
+              request.onblocked = () => finish(reject, new Error(`Blocked opening IndexedDB ${dbName}.${storeName}`));
+              request.onsuccess = () => {
+                db = request.result;
+                db.onversionchange = () => db.close();
+                let tx;
+                try {
+                  tx = db.transaction(storeName, 'readonly');
+                } catch (error) {
+                  finish(reject, error);
+                  return;
+                }
+                const store = tx.objectStore(storeName);
+                const getAll = store.getAll();
+                getAll.onerror = () => finish(reject, getAll.error);
+                getAll.onsuccess = () => {
+                  finish(resolve, getAll.result || []);
+                };
+                tx.onabort = () => finish(reject, tx.error || new Error(`Aborted reading IndexedDB ${dbName}.${storeName}`));
+                tx.onerror = () => finish(reject, tx.error);
+              };
+            });
+          }
+
+          function contextExists(value) {
+            if (!value || typeof mod === 'undefined' || !mod.getContext) return false;
+            try {
+              mod.getContext(value);
+              return true;
+            } catch {
+              return false;
+            }
+          }
+
+          const loadedNames = typeof mod !== 'undefined' ? mod.manager?.getLoadedModList?.() || [] : [];
+          const marker = globalThis.__mcpLocalModSmokeLoaded || null;
+          const localMods = await getAllFromIndexedDB('melvordb', 'localMods');
+          const localRecord = localMods.find((record) => Number(record.id) === Number(localModId)) || null;
+          const loadedByName = localModName ? loadedNames.includes(localModName) : false;
+          const loadedByNamespace = contextExists(namespace);
+          const loadedByMarker = marker && (!namespace || marker.namespace === namespace);
+          return {
+            loaded: Boolean(loadedByMarker || loadedByNamespace || loadedByName),
+            loadedByMarker: Boolean(loadedByMarker),
+            loadedByNamespace,
+            loadedByName,
+            marker,
+            localStorageLoadingGuard: localStorage.getItem('mct_i--loading-mod'),
+            loadedNames,
+            localRecord: localRecord
+              ? {
+                  id: localRecord.id,
+                  name: localRecord.name,
+                  disabled: Boolean(localRecord.disabled),
+                  namespace: localRecord.mod?.namespace || null,
+                  modId: localRecord.mod?.id ?? null,
+                }
+              : null,
+            title: document.title,
+            location: location.href,
+          };
+        },
+        { localModId, localModName, namespace }
+      )
+    );
+  } finally {
+    if (options.cleanup !== false && Number.isInteger(localModId)) {
+      cleanup = await retryAfterNavigation(page, options, () =>
+        manageCreatorToolkitLocalMods(page, { ...options, operation: 'remove', localModId, apply: true }, null)
+      ).catch((error) => ({
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+      await page.evaluate(() => localStorage.removeItem('mct_i--loading-mod')).catch(() => {});
+    }
+  }
+
+  const result = {
+    apply: true,
+    changed: true,
+    cleanup,
+    cleanupEnabled: options.cleanup !== false,
+    creatorToolkitInstalled: added.creatorToolkitInstalled,
+    creatorToolkitLoaded: added.creatorToolkitLoaded,
+    localMod: added.localMod,
+    operation: 'verify_load',
+    reloadRequired: false,
+    verification,
+    verifyLoadRetries: options.verifyLoadRetries || [],
+    warnings: [
+      ...(added.warnings || []),
+      ...(verification?.loaded ? [] : ['Local mod was added and reloaded, but no loaded marker/name/namespace was observed.']),
+    ],
+  };
+  if (!verification?.loaded) {
+    throw new Error(
+      `Creator Toolkit verify_load failed for ${localModName || 'local mod'}: local mod did not appear in the loaded mod list, namespace context, or test marker after reload. ${result.warnings.join(' ')}`
+    );
+  }
+  return result;
+}
+
 async function run(options) {
-  const localInput = options.mode === 'local' && options.operation === 'add' ? await buildLocalModInput(options) : null;
+  const localInput = options.mode === 'local' && ['add', 'verify_load'].includes(options.operation) ? await buildLocalModInput(options) : null;
   const browser = await chromium.launch({ headless: !options.headful });
   const contextOptions = {};
   if (options.storageState && fsSync.existsSync(options.storageState)) contextOptions.storageState = options.storageState;
   const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
+  options.browserEvents = [];
+  const recordBrowserEvent = (event) => {
+    options.browserEvents.push({ ...event, observedAt: new Date().toISOString() });
+    if (options.browserEvents.length > 200) options.browserEvents.shift();
+  };
+  page.on('console', (message) => {
+    const location = message.location();
+    recordBrowserEvent({
+      type: 'console',
+      level: message.type(),
+      text: message.text(),
+      location: location.url ? `${location.url}:${location.lineNumber}:${location.columnNumber}` : '',
+    });
+  });
+  page.on('pageerror', (error) => {
+    recordBrowserEvent({
+      type: 'pageerror',
+      message: error.message,
+      stack: error.stack || '',
+    });
+  });
+  page.on('requestfailed', (request) => {
+    recordBrowserEvent({
+      type: 'requestfailed',
+      url: request.url(),
+      failure: request.failure()?.errorText || '',
+    });
+  });
 
   try {
     await gotoAndSettle(page, options.url, options.timeoutMs);
@@ -1228,24 +1658,40 @@ async function run(options) {
       activeProfile: state.activeProfile,
       loadedNames: state.loadedNames,
       installedCount: state.installedCount,
+      modioRecoveryActions: options.modioRecoveryActions || [],
     };
 
     if (options.mode === 'list') {
-      return await attachBrowserReport(page, { ok: true, mode: options.mode, login, ...visibleState }, options);
+      return await attachBrowserReport(page, { ok: true, mode: options.mode, login, ...visibleState, modioRecoveryActions: options.modioRecoveryActions || [] }, options);
     }
 
     if (options.mode === 'profile') {
       const profile = await retryAfterNavigation(page, options, () => configureProfileMod(page, options));
-      return await attachBrowserReport(page, { ok: true, mode: options.mode, login, ...summaryState, profile }, options);
+      return await attachBrowserReport(
+        page,
+        { ok: true, mode: options.mode, login, ...summaryState, modioRecoveryActions: options.modioRecoveryActions || [], profile },
+        options
+      );
     }
 
     if (options.mode === 'local') {
-      const creatorToolkit = await retryAfterNavigation(page, options, () => manageCreatorToolkitLocalMods(page, options, localInput));
-      return await attachBrowserReport(page, { ok: true, mode: options.mode, login, ...summaryState, creatorToolkit }, options);
+      const creatorToolkit =
+        options.operation === 'verify_load'
+          ? await verifyCreatorToolkitLocalModLoad(page, options, localInput)
+          : await retryAfterNavigation(page, options, () => manageCreatorToolkitLocalMods(page, options, localInput));
+      return await attachBrowserReport(
+        page,
+        { ok: true, mode: options.mode, login, ...summaryState, modioRecoveryActions: options.modioRecoveryActions || [], creatorToolkit },
+        options
+      );
     }
 
     const exported = await writeFetchedSources(state, options);
-    return await attachBrowserReport(page, { ok: true, mode: options.mode, login, ...visibleState, exported }, options);
+    return await attachBrowserReport(
+      page,
+      { ok: true, mode: options.mode, login, ...visibleState, modioRecoveryActions: options.modioRecoveryActions || [], exported },
+      options
+    );
   } catch (error) {
     const screenshotPath = await captureFailureScreenshot(page, options, error).catch(() => null);
     if (screenshotPath && error instanceof Error) {

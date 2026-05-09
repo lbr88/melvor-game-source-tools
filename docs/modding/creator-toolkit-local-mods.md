@@ -55,6 +55,10 @@ If the game crashes or navigation is interrupted while the key remains, Creator 
 
 MCP tools that test local mod loading should report this key when present and should clean up test local mods after verification.
 
+The `creator_toolkit_local_mods` MCP tool supports `operation: "verify_load"` for this flow. It writes the local mod, reloads the game so Creator Toolkit can load it, verifies the local mod by loaded name, namespace context, or explicit test marker, saves a page screenshot/report, and removes the temporary local mod unless `cleanup: false` is supplied.
+
+Melvor can intermittently show a `mod.io Unreachable` prompt while the game is otherwise usable. Browser-backed MCP tools expose `modioRecovery` for this case: `local` clicks `Use Local Mode` so installed/local mods can still load, `reload` clicks `Reload to Try Again`, and `fail` stops immediately with a screenshot/report. Tools should not clear cached mod.io credentials automatically.
+
 ## Directory Link
 
 Directory Link mode is only available in the Steam client. It zips the linked directory each reload. Browser automation can package a directory once and store the `dir` metadata, but it cannot provide Steam's live directory re-zipping behavior.

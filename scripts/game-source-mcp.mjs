@@ -196,6 +196,7 @@ const TOOLS = [
         timeoutMs: { type: 'integer', minimum: 1000, default: 90000 },
         waitMs: { type: 'integer', minimum: 0, default: 10000 },
         headful: { type: 'boolean', default: false },
+        modioRecovery: { type: 'string', enum: ['local', 'reload', 'fail'], default: 'local', description: 'How to handle Melvor mod.io unreachable prompts during browser tests.' },
         screenshot: { type: 'boolean', default: true, description: 'Save a Playwright page screenshot and JSON report.' },
         reportDir: { type: 'string', description: 'Output directory for screenshots and JSON reports. Defaults to ignored reports/.' },
         storageState: { type: 'string', description: 'Optional Playwright storage state file to reuse/save login.' },
@@ -215,6 +216,7 @@ const TOOLS = [
         timeoutMs: { type: 'integer', minimum: 1000, default: 90000 },
         waitMs: { type: 'integer', minimum: 0, default: 10000 },
         headful: { type: 'boolean', default: false },
+        modioRecovery: { type: 'string', enum: ['local', 'reload', 'fail'], default: 'local', description: 'How to handle Melvor mod.io unreachable prompts during browser tests.' },
         screenshot: { type: 'boolean', default: true, description: 'Save a Playwright page screenshot and JSON report.' },
         reportDir: { type: 'string', description: 'Output directory for screenshots and JSON reports. Defaults to ignored reports/.' },
         storageState: { type: 'string', description: 'Optional Playwright storage state file to reuse/save login.' },
@@ -241,6 +243,7 @@ const TOOLS = [
         timeoutMs: { type: 'integer', minimum: 1000, default: 90000 },
         waitMs: { type: 'integer', minimum: 0, default: 10000 },
         headful: { type: 'boolean', default: false },
+        modioRecovery: { type: 'string', enum: ['local', 'reload', 'fail'], default: 'local', description: 'How to handle Melvor mod.io unreachable prompts during browser tests.' },
         screenshot: { type: 'boolean', default: true, description: 'Save a Playwright page screenshot and JSON report.' },
         reportDir: { type: 'string', description: 'Output directory for screenshots and JSON reports. Defaults to ignored reports/.' },
         storageState: { type: 'string', description: 'Optional Playwright storage state file to reuse/save login.' },
@@ -255,7 +258,7 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        operation: { type: 'string', enum: ['list', 'add', 'remove', 'enable', 'disable'], default: 'list' },
+        operation: { type: 'string', enum: ['list', 'add', 'remove', 'enable', 'disable', 'verify_load'], default: 'list' },
         modPath: { type: 'string', description: 'Local mod directory containing manifest.json, or a .zip modfile, for operation=add.' },
         name: { type: 'string', description: 'Optional Creator Toolkit display name for operation=add.' },
         localModId: { type: 'integer', minimum: 1, description: 'Creator Toolkit localMods IndexedDB id for enable/disable/remove or targeted replacement.' },
@@ -263,11 +266,13 @@ const TOOLS = [
         directoryPath: { type: 'string', description: 'Optional directory-link path to preserve in Creator Toolkit metadata. Browser automation packages the directory once; Steam does live directory re-zipping.' },
         disabled: { type: 'boolean', default: false, description: 'When adding, store the local mod disabled.' },
         replace: { type: 'boolean', default: false, description: 'When adding, replace an existing local mod with the same namespace, linked mod id, or name.' },
+        cleanup: { type: 'boolean', default: true, description: 'For operation=verify_load, remove the temporary local mod after verification.' },
         apply: { type: 'boolean', default: false, description: 'Persist the change. Defaults to dry-run.' },
         url: { type: 'string', default: 'https://melvoridle.com/index_game.php' },
         timeoutMs: { type: 'integer', minimum: 1000, default: 90000 },
         waitMs: { type: 'integer', minimum: 0, default: 10000 },
         headful: { type: 'boolean', default: false },
+        modioRecovery: { type: 'string', enum: ['local', 'reload', 'fail'], default: 'local', description: 'How to handle Melvor mod.io unreachable prompts during browser tests.' },
         screenshot: { type: 'boolean', default: true, description: 'Save a Playwright page screenshot and JSON report.' },
         reportDir: { type: 'string', description: 'Output directory for screenshots and JSON reports. Defaults to ignored reports/.' },
         storageState: { type: 'string', description: 'Optional Playwright storage state file to reuse/save login.' },
@@ -898,6 +903,7 @@ function appendModManagerArgs(commandArgs, args = {}, mode) {
   commandArgs.push('--wait-ms', String(numeric(args.waitMs, 10000, 0)));
   if (args.includeDisabled) commandArgs.push('--include-disabled');
   if (args.headful) commandArgs.push('--headful');
+  if (args.modioRecovery) commandArgs.push('--modio-recovery', args.modioRecovery);
   if (args.screenshot === false) commandArgs.push('--no-screenshot');
   if (args.reportDir) commandArgs.push('--report-dir', args.reportDir);
   if (args.storageState) commandArgs.push('--storage-state', args.storageState);
@@ -941,6 +947,7 @@ async function toolCreatorToolkitLocalMods(args = {}) {
   if (args.directoryPath) commandArgs.push('--directory-path', String(args.directoryPath));
   if (args.disabled) commandArgs.push('--disabled');
   if (args.replace) commandArgs.push('--replace');
+  if (args.cleanup === false) commandArgs.push('--no-cleanup');
   if (args.apply) commandArgs.push('--apply');
   const output = run(process.execPath, commandArgs);
   return textContent(output);
