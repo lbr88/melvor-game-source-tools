@@ -112,6 +112,9 @@ test('MCP tool schemas are OpenAI-compatible at the top level', async (t) => {
   const tools = response.result.tools;
   assert.ok(Array.isArray(tools));
   assert.ok(tools.length > 0);
+  const toolNames = new Set(tools.map((tool) => tool.name));
+  assert.ok(toolNames.has('mod_manager_configure_mod'));
+  assert.ok(toolNames.has('creator_toolkit_local_mods'));
 
   const failures = [];
   for (const tool of tools) {
@@ -141,4 +144,29 @@ test('game_source_search validates query or preset at tool-call time', async (t)
   assert.equal(response.error, undefined);
   assert.equal(response.result.isError, true);
   assert.match(response.result.content[0].text, /query or preset/i);
+});
+
+test('mutation tools fail before browser launch when required mutation inputs are missing', async (t) => {
+  const client = startServer(t);
+  await initialize(client);
+
+  const profileResponse = await client.request('tools/call', {
+    name: 'mod_manager_configure_mod',
+    arguments: {
+      operation: 'enable',
+    },
+  });
+  assert.equal(profileResponse.error, undefined);
+  assert.equal(profileResponse.result.isError, true);
+  assert.match(profileResponse.result.content[0].text, /Expected integer/i);
+
+  const localResponse = await client.request('tools/call', {
+    name: 'creator_toolkit_local_mods',
+    arguments: {
+      operation: 'add',
+    },
+  });
+  assert.equal(localResponse.error, undefined);
+  assert.equal(localResponse.result.isError, true);
+  assert.match(localResponse.result.content[0].text, /mod-path/i);
 });

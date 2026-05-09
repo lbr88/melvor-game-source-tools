@@ -217,6 +217,55 @@ const TOOLS = [
     },
   },
   {
+    name: 'mod_manager_configure_mod',
+    title: 'Configure Mod Manager Mod',
+    description: 'Dry-run or persist Mod Manager profile membership and live/latest version preference for an installed mod. Enable/add and disable/remove operate on the selected profile, not mod.io subscriptions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        operation: {
+          type: 'string',
+          enum: ['enable', 'disable', 'add_to_profile', 'remove_from_profile', 'prefer_latest', 'prefer_live'],
+          description: 'Profile operations require the mod to already be installed. Version operations persist the live/latest preference.',
+        },
+        modId: { type: 'integer', minimum: 1, description: 'Mod.io id of the installed mod.' },
+        profileId: { type: 'string', description: 'Optional Mod Manager profile id. Defaults to the active profile.' },
+        apply: { type: 'boolean', default: false, description: 'Persist the change. Defaults to dry-run.' },
+        persist: { type: 'boolean', default: true, description: 'Persist to PlayFab account data when available. False updates browser localStorage only.' },
+        url: { type: 'string', default: 'https://melvoridle.com/index_game.php' },
+        timeoutMs: { type: 'integer', minimum: 1000, default: 90000 },
+        waitMs: { type: 'integer', minimum: 0, default: 10000 },
+        headful: { type: 'boolean', default: false },
+        storageState: { type: 'string', description: 'Optional Playwright storage state file to reuse/save login.' },
+      },
+      required: ['operation', 'modId'],
+    },
+  },
+  {
+    name: 'creator_toolkit_local_mods',
+    title: 'Manage Creator Toolkit Local Mods',
+    description: 'List, add, remove, enable, or disable Creator Toolkit local mods through the browser IndexedDB localMods store. Mutations are dry-run unless apply is true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        operation: { type: 'string', enum: ['list', 'add', 'remove', 'enable', 'disable'], default: 'list' },
+        modPath: { type: 'string', description: 'Local mod directory containing manifest.json, or a .zip modfile, for operation=add.' },
+        name: { type: 'string', description: 'Optional Creator Toolkit display name for operation=add.' },
+        localModId: { type: 'integer', minimum: 1, description: 'Creator Toolkit localMods IndexedDB id for enable/disable/remove or targeted replacement.' },
+        linkedModId: { type: 'integer', minimum: 1, description: 'Optional mod.io id to link the local mod to.' },
+        directoryPath: { type: 'string', description: 'Optional directory-link path to preserve in Creator Toolkit metadata. Browser automation packages the directory once; Steam does live directory re-zipping.' },
+        disabled: { type: 'boolean', default: false, description: 'When adding, store the local mod disabled.' },
+        replace: { type: 'boolean', default: false, description: 'When adding, replace an existing local mod with the same namespace, linked mod id, or name.' },
+        apply: { type: 'boolean', default: false, description: 'Persist the change. Defaults to dry-run.' },
+        url: { type: 'string', default: 'https://melvoridle.com/index_game.php' },
+        timeoutMs: { type: 'integer', minimum: 1000, default: 90000 },
+        waitMs: { type: 'integer', minimum: 0, default: 10000 },
+        headful: { type: 'boolean', default: false },
+        storageState: { type: 'string', description: 'Optional Playwright storage state file to reuse/save login.' },
+      },
+    },
+  },
+  {
     name: 'mod_test_browser_check',
     title: 'Check Mod Browser Automation',
     description: 'Launch Chromium through Playwright and report whether browser automation is usable.',
@@ -758,6 +807,34 @@ async function toolModManagerFetchSources(args = {}) {
   return textContent(output);
 }
 
+async function toolModManagerConfigure(args = {}) {
+  const commandArgs = [];
+  appendModManagerArgs(commandArgs, args, 'profile');
+  commandArgs.push('--operation', args.operation || 'enable');
+  commandArgs.push('--mod-id', String(numeric(args.modId, undefined, 1)));
+  if (args.profileId) commandArgs.push('--profile-id', String(args.profileId));
+  if (args.apply) commandArgs.push('--apply');
+  if (args.persist === false) commandArgs.push('--no-persist');
+  const output = run(process.execPath, commandArgs);
+  return textContent(output);
+}
+
+async function toolCreatorToolkitLocalMods(args = {}) {
+  const commandArgs = [];
+  appendModManagerArgs(commandArgs, args, 'local');
+  commandArgs.push('--operation', args.operation || 'list');
+  if (args.modPath) commandArgs.push('--mod-path', String(args.modPath));
+  if (args.name) commandArgs.push('--name', String(args.name));
+  if (args.localModId !== undefined) commandArgs.push('--local-mod-id', String(numeric(args.localModId, undefined, 1)));
+  if (args.linkedModId !== undefined) commandArgs.push('--linked-mod-id', String(numeric(args.linkedModId, undefined, 1)));
+  if (args.directoryPath) commandArgs.push('--directory-path', String(args.directoryPath));
+  if (args.disabled) commandArgs.push('--disabled');
+  if (args.replace) commandArgs.push('--replace');
+  if (args.apply) commandArgs.push('--apply');
+  const output = run(process.execPath, commandArgs);
+  return textContent(output);
+}
+
 async function toolModSmoke(args = {}) {
   const commandArgs = [
     path.join(REPO_ROOT, 'scripts/mod-test.mjs'),
@@ -809,6 +886,8 @@ async function callTool(name, args) {
     if (name === 'melvor_modding_guides_search') return await toolGuidesSearch(args);
     if (name === 'mod_manager_loaded_mods') return await toolModManagerLoaded(args);
     if (name === 'mod_manager_fetch_sources') return await toolModManagerFetchSources(args);
+    if (name === 'mod_manager_configure_mod') return await toolModManagerConfigure(args);
+    if (name === 'creator_toolkit_local_mods') return await toolCreatorToolkitLocalMods(args);
     if (name === 'mod_test_browser_check') return await toolBrowserCheck(args);
     if (name === 'mod_test_smoke') return await toolModSmoke(args);
     if (name === 'mod_profile_runtime') return await toolModProfile(args);
