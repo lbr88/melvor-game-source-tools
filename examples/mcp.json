@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "melvor-game-source": {
+      "command": "node",
+      "args": [
+        "/path/to/melvor-game-source-tools/scripts/game-source-mcp.mjs"
+      ]
+    }
+  }
+}

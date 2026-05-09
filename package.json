@@ -1,0 +1,31 @@
+{
+  "name": "melvor-game-source-tools",
+  "version": "0.1.0",
+  "description": "Downloader, branch-aware search, and MCP tools for a local Melvor Idle game-source checkout.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "melvor-game-source-beautify": "scripts/beautify-game-source.mjs",
+    "melvor-game-source-mcp": "scripts/game-source-mcp.mjs",
+    "melvor-mod-test": "scripts/mod-test.mjs",
+    "melvor-game-source-search": "scripts/search-game-source.mjs",
+    "melvor-game-source-refresh": "scripts/refresh-game-source.mjs"
+  },
+  "scripts": {
+    "source:beautify": "node scripts/beautify-game-source.mjs",
+    "mcp": "node scripts/game-source-mcp.mjs",
+    "mod:check": "node scripts/mod-test.mjs --mode check",
+    "mod:profile": "node scripts/mod-test.mjs --mode profile",
+    "mod:smoke": "node scripts/mod-test.mjs --mode smoke",
+    "source:manifest": "node scripts/refresh-game-source.mjs --manifest-only --source-name web --tag-qualifier observed",
+    "source:manifest:android": "node scripts/refresh-game-source.mjs --manifest-only --all --device \"Pixel 5\" --source-name android-loaded --tag-qualifier android-loaded --url https://android.melvoridle.com/offlineClientStage3/index_mobile.php",
+    "source:refresh": "node scripts/refresh-game-source.mjs --source-name web --tag-qualifier observed",
+    "source:refresh:android": "node scripts/refresh-game-source.mjs --all --device \"Pixel 5\" --source-name android-loaded --tag-qualifier android-loaded --url https://android.melvoridle.com/offlineClientStage3/index_mobile.php",
+    "source:search": "node scripts/search-game-source.mjs",
+    "check": "node --check scripts/beautify-game-source.mjs && node --check scripts/game-source-mcp.mjs && node --check scripts/mod-test.mjs && node --check scripts/search-game-source.mjs && node --check scripts/refresh-game-source.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "prettier": "^3.8.3"
+  }
+}
