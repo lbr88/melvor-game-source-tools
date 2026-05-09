@@ -32,8 +32,12 @@ function parseArgs(argv) {
     apply: false,
     directoryPath: '',
     disabled: false,
+    durationMs: 5000,
+    gameAction: 'snapshot',
     headful: false,
     includeDisabled: false,
+    actionPage: '',
+    actionSelector: '',
     linkedModId: null,
     localModId: null,
     modioRecovery: 'local',
@@ -49,6 +53,9 @@ function parseArgs(argv) {
     reportDir: process.env.MELVOR_REPORTS_DIR || path.join(REPO_ROOT, DEFAULT_REPORTS_DIR),
     replace: false,
     cleanup: true,
+    readOnly: true,
+    saveSlot: process.env.MELVOR_TEST_CHARACTER_SLOT ? Number.parseInt(process.env.MELVOR_TEST_CHARACTER_SLOT, 10) : null,
+    saveSource: 'cloud',
     screenshot: true,
     storageState: process.env.MELVOR_BROWSER_STORAGE_STATE || '',
     timeoutMs: 90000,
@@ -71,7 +78,11 @@ function parseArgs(argv) {
     else if (arg === '--directory-path') options.directoryPath = nextValue();
     else if (arg.startsWith('--directory-path=')) options.directoryPath = arg.slice('--directory-path='.length);
     else if (arg === '--disabled') options.disabled = true;
+    else if (arg === '--duration-ms') options.durationMs = Number.parseInt(nextValue(), 10);
+    else if (arg.startsWith('--duration-ms=')) options.durationMs = Number.parseInt(arg.slice('--duration-ms='.length), 10);
     else if (arg === '--enabled') options.disabled = false;
+    else if (arg === '--game-action') options.gameAction = nextValue();
+    else if (arg.startsWith('--game-action=')) options.gameAction = arg.slice('--game-action='.length);
     else if (arg === '--linked-mod-id') options.linkedModId = Number.parseInt(nextValue(), 10);
     else if (arg.startsWith('--linked-mod-id=')) options.linkedModId = Number.parseInt(arg.slice('--linked-mod-id='.length), 10);
     else if (arg === '--local-mod-id') options.localModId = Number.parseInt(nextValue(), 10);
@@ -98,8 +109,17 @@ function parseArgs(argv) {
     else if (arg === '--report-dir') options.reportDir = nextValue();
     else if (arg.startsWith('--report-dir=')) options.reportDir = arg.slice('--report-dir='.length);
     else if (arg === '--replace') options.replace = true;
+    else if (arg === '--allow-save-writes') options.readOnly = false;
     else if (arg === '--no-cleanup') options.cleanup = false;
     else if (arg === '--no-screenshot') options.screenshot = false;
+    else if (arg === '--save-slot') options.saveSlot = Number.parseInt(nextValue(), 10);
+    else if (arg.startsWith('--save-slot=')) options.saveSlot = Number.parseInt(arg.slice('--save-slot='.length), 10);
+    else if (arg === '--save-source') options.saveSource = nextValue();
+    else if (arg.startsWith('--save-source=')) options.saveSource = arg.slice('--save-source='.length);
+    else if (arg === '--action-page') options.actionPage = nextValue();
+    else if (arg.startsWith('--action-page=')) options.actionPage = arg.slice('--action-page='.length);
+    else if (arg === '--action-selector') options.actionSelector = nextValue();
+    else if (arg.startsWith('--action-selector=')) options.actionSelector = arg.slice('--action-selector='.length);
     else if (arg === '--storage-state') options.storageState = nextValue();
     else if (arg.startsWith('--storage-state=')) options.storageState = arg.slice('--storage-state='.length);
     else if (arg === '--timeout-ms') options.timeoutMs = Number.parseInt(nextValue(), 10);
@@ -118,11 +138,14 @@ function parseArgs(argv) {
     }
   }
 
-  if (!['list', 'fetch', 'profile', 'local'].includes(options.mode)) throw new Error(`Unknown mode: ${options.mode}`);
+  if (!['list', 'fetch', 'profile', 'local', 'game'].includes(options.mode)) throw new Error(`Unknown mode: ${options.mode}`);
+  if (!['snapshot', 'wait', 'click_selector', 'open_page'].includes(options.gameAction)) throw new Error(`Unknown game action: ${options.gameAction}`);
   if (!['fail', 'local', 'reload'].includes(options.modioRecovery)) throw new Error(`Unknown mod.io recovery mode: ${options.modioRecovery}`);
+  if (!['cloud', 'local'].includes(options.saveSource)) throw new Error(`Unknown save source: ${options.saveSource}`);
   for (const key of ['timeoutMs', 'waitMs']) {
     if (!Number.isFinite(options[key]) || options[key] < 0) throw new Error(`${key} must be zero or greater`);
   }
+  if (!Number.isFinite(options.durationMs) || options.durationMs < 0) throw new Error('durationMs must be zero or greater');
   for (const key of ['linkedModId', 'localModId', 'modId']) {
     if (options[key] !== null && (!Number.isInteger(options[key]) || options[key] <= 0)) {
       throw new Error(`${key} must be a positive integer`);
@@ -133,11 +156,14 @@ function parseArgs(argv) {
   options.reportDir = path.resolve(options.reportDir);
   if (options.modPath) options.modPath = path.resolve(options.modPath);
   if (options.directoryPath) options.directoryPath = path.resolve(options.directoryPath);
+  if (options.saveSlot !== null && (!Number.isInteger(options.saveSlot) || options.saveSlot < 0)) {
+    throw new Error('saveSlot must be zero or greater.');
+  }
   return options;
 }
 
 function printHelp() {
-  console.log(`Usage: node scripts/mod-manager-sources.mjs --mode <list|fetch|profile|local> [options]
+  console.log(`Usage: node scripts/mod-manager-sources.mjs --mode <list|fetch|profile|local|game> [options]
 
 Options:
   --url <url>              Melvor URL to open. Defaults to ${DEFAULT_URL}
@@ -151,6 +177,13 @@ Options:
   --linked-mod-id <id>     Optional mod.io id linked to a Creator Toolkit local mod.
   --directory-path <path>  Preserve a directory-link path in Creator Toolkit metadata.
   --modio-recovery <mode>  Handle mod.io unreachable prompts: local, reload, or fail. Default: local.
+  --save-slot <n>          Save slot for game mode. Defaults to MELVOR_TEST_CHARACTER_SLOT.
+  --save-source <source>   Save source for game mode: cloud or local. Default: cloud.
+  --game-action <action>   Game action after loading save: snapshot, wait, click_selector, open_page.
+  --action-selector <css>  CSS selector for game-action=click_selector.
+  --action-page <page-id>  Page id for game-action=open_page, such as melvorD:Woodcutting.
+  --duration-ms <n>        Settle/play duration after loading the save or action. Defaults to 5000.
+  --allow-save-writes      Allow game mode to write local/cloud saves. Defaults to read-only guard.
   --apply                  Persist the requested mutation. Without this, mutations are dry-run.
   --no-persist             Update browser localStorage only instead of PlayFab account data.
   --report-dir <dir>       Output directory for screenshots/reports. Defaults to ${DEFAULT_REPORTS_DIR}/
@@ -655,6 +688,27 @@ async function attachBrowserReport(page, result, options) {
   const reportDir = await newReportDir(options.reportDir, `mod-manager-${options.mode}`);
   const screenshotPath = path.join(reportDir, 'page.png');
   await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {});
+  if (result?.gameTest?.state) {
+    const readOnlySaveState = await page
+      .evaluate(() => ({
+        readOnlySaveWritesBlocked: globalThis.__mcpBlockedSaveWrites || [],
+        readOnlySaveWriteSummary: Object.values(globalThis.__mcpBlockedSaveWriteSummary || {}),
+      }))
+      .catch(() => ({
+        readOnlySaveWritesBlocked: result.gameTest.state.readOnlySaveWritesBlocked || [],
+        readOnlySaveWriteSummary: result.gameTest.state.readOnlySaveWriteSummary || [],
+      }));
+    result = {
+      ...result,
+      gameTest: {
+        ...result.gameTest,
+        state: {
+          ...result.gameTest.state,
+          ...readOnlySaveState,
+        },
+      },
+    };
+  }
   const report = {
     ...result,
     browserEvents: options.browserEvents || [],
@@ -1599,6 +1653,255 @@ async function verifyCreatorToolkitLocalModLoad(page, options, localInput) {
   return result;
 }
 
+async function waitForSaveSelection(page, options) {
+  await page.waitForFunction(
+    (slot) =>
+      Boolean(
+        typeof loadCloudSave === 'function' &&
+          typeof loadLocalSave === 'function' &&
+          typeof cloudManager !== 'undefined' &&
+          typeof mod !== 'undefined' &&
+          typeof cloudSaveHeaders !== 'undefined' &&
+          typeof localSaveHeaders !== 'undefined' &&
+          Array.isArray(cloudSaveHeaders) &&
+          Array.isArray(localSaveHeaders) &&
+          cloudSaveHeaders.length > slot &&
+          localSaveHeaders.length > slot
+      ),
+    options.saveSlot,
+    { timeout: options.timeoutMs }
+  );
+}
+
+async function installReadOnlySaveGuard(page) {
+  return await page.evaluate(() => {
+    globalThis.__mcpBlockedSaveWrites = [];
+    globalThis.__mcpBlockedSaveWriteSummary = {};
+    const record = (kind, detail = {}) => {
+      const at = new Date().toISOString();
+      const key = JSON.stringify({ kind, detail });
+      const summary = globalThis.__mcpBlockedSaveWriteSummary[key] || {
+        kind,
+        detail,
+        count: 0,
+        firstAt: at,
+        lastAt: at,
+      };
+      summary.count += 1;
+      summary.lastAt = at;
+      globalThis.__mcpBlockedSaveWriteSummary[key] = summary;
+      globalThis.__mcpBlockedSaveWrites.push({ kind, ...detail, at });
+      if (globalThis.__mcpBlockedSaveWrites.length > 25) globalThis.__mcpBlockedSaveWrites.shift();
+      if (summary.count === 1 || summary.count % 250 === 0) {
+        console.warn('[MCP read-only save guard] blocked save write', kind, { ...detail, count: summary.count });
+      }
+    };
+    const mark = Symbol.for('mcpReadOnlySaveGuardInstalled');
+    if (globalThis[mark]) return { installed: false, alreadyInstalled: true };
+    globalThis[mark] = true;
+
+    if (typeof saveData === 'function') {
+      globalThis.__mcpOriginalSaveData = saveData;
+      saveData = () => {
+        record('saveData');
+        return false;
+      };
+    }
+
+    const storageSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function guardedSetItem(key, value) {
+      const stringKey = String(key);
+      if (/^MI-(?:test-|beta-)?\d+-.*saveGame$/.test(stringKey)) {
+        record('localStorage.setItem', { key: stringKey });
+        return undefined;
+      }
+      return storageSetItem.call(this, key, value);
+    };
+
+    if (typeof nativeManager !== 'undefined' && typeof nativeManager.saveToNativeCloudBackup === 'function') {
+      const originalNativeSave = nativeManager.saveToNativeCloudBackup.bind(nativeManager);
+      globalThis.__mcpOriginalNativeSaveToCloudBackup = originalNativeSave;
+      nativeManager.saveToNativeCloudBackup = (key, value) => {
+        record('nativeManager.saveToNativeCloudBackup', { key: String(key), bytes: String(value ?? '').length });
+        return false;
+      };
+    }
+
+    if (typeof cloudManager !== 'undefined') {
+      for (const name of ['forceUpdatePlayFabSave', 'saveToSteamCloud', 'deletePlayFabSave', 'deleteFromSteamCloud']) {
+        if (typeof cloudManager[name] !== 'function') continue;
+        const original = cloudManager[name].bind(cloudManager);
+        globalThis[`__mcpOriginalCloudManager_${name}`] = original;
+        cloudManager[name] = (...args) => {
+          record(`cloudManager.${name}`, { args: args.map((arg) => String(arg)).slice(0, 3) });
+          return name === 'forceUpdatePlayFabSave' ? Promise.resolve() : false;
+        };
+      }
+    }
+
+    const updateUserData =
+      typeof PlayFab !== 'undefined' && PlayFab.ClientApi && typeof PlayFab.ClientApi.UpdateUserData === 'function'
+        ? PlayFab.ClientApi.UpdateUserData
+        : null;
+    if (updateUserData) {
+      PlayFab.ClientApi.UpdateUserData = (request, callback) => {
+        const dataKeys = Object.keys(request?.Data || {});
+        const removeKeys = request?.KeysToRemove || [];
+        const touchesSave = [...dataKeys, ...removeKeys].some((key) => /^save\d+(?:_beta|_test)?$/.test(String(key)) || key === 'currentGamemode');
+        if (touchesSave) {
+          record('PlayFab.ClientApi.UpdateUserData', { dataKeys, removeKeys });
+          callback?.({ code: 200, data: { DataVersion: -1 } }, null);
+          return undefined;
+        }
+        return updateUserData.call(PlayFab.ClientApi, request, callback);
+      };
+    }
+
+    return { installed: true, alreadyInstalled: false };
+  });
+}
+
+async function loadGameSave(page, options) {
+  if (!Number.isInteger(options.saveSlot)) {
+    throw new Error('Game mode requires --save-slot or MELVOR_TEST_CHARACTER_SLOT.');
+  }
+  await waitForSaveSelection(page, options);
+  const guard = options.readOnly ? await installReadOnlySaveGuard(page) : { installed: false, disabled: true };
+  const loadResult = await page.evaluate(
+    async ({ saveSlot, saveSource }) => {
+      const headers = saveSource === 'cloud' ? cloudSaveHeaders : localSaveHeaders;
+      const header = headers?.[saveSlot];
+      if (typeof header === 'number') throw new Error(`${saveSource} save slot ${saveSlot} is not loadable; header code ${header}.`);
+      if (!header) throw new Error(`${saveSource} save slot ${saveSlot} was not found.`);
+      if (saveSource === 'cloud') {
+        const saveString = cloudManager.getPlayFabSave(saveSlot);
+        if (!saveString) throw new Error(`Cloud save slot ${saveSlot} has no save string.`);
+        await loadCloudSave(saveSlot);
+      } else {
+        await loadLocalSave(saveSlot);
+      }
+      return {
+        header: {
+          characterName: header.characterName || null,
+          saveVersion: header.saveVersion ?? null,
+          currentGamemode: header.currentGamemode?.id || header.currentGamemode || null,
+          totalSkillLevel: header.totalSkillLevel ?? null,
+          gp: header.gp ?? null,
+          tickTimestamp: header.tickTimestamp ?? null,
+        },
+      };
+    },
+    { saveSlot: options.saveSlot, saveSource: options.saveSource }
+  );
+  await page.waitForFunction(
+    () =>
+      Boolean(
+        typeof game !== 'undefined' &&
+          game.currentGamemode &&
+          typeof isLoaded !== 'undefined' &&
+          isLoaded === true &&
+          typeof inCharacterSelection !== 'undefined' &&
+          inCharacterSelection === false
+      ),
+    undefined,
+    { timeout: options.timeoutMs }
+  );
+  return { guard, ...loadResult };
+}
+
+async function runGameAction(page, options) {
+  if (options.gameAction === 'snapshot') return { action: 'snapshot', changed: false };
+  if (options.gameAction === 'wait') {
+    await page.waitForTimeout(options.durationMs);
+    return { action: 'wait', durationMs: options.durationMs, changed: false };
+  }
+  if (options.gameAction === 'click_selector') {
+    if (!options.actionSelector) throw new Error('game-action=click_selector requires --action-selector.');
+    await page.locator(options.actionSelector).first().click({ timeout: options.timeoutMs });
+    await page.waitForTimeout(options.durationMs);
+    return { action: 'click_selector', selector: options.actionSelector, durationMs: options.durationMs, changed: true };
+  }
+  if (options.gameAction === 'open_page') {
+    if (!options.actionPage) throw new Error('game-action=open_page requires --action-page.');
+    const opened = await page.evaluate((pageId) => {
+      if (typeof changePage !== 'function') throw new Error('changePage was not available.');
+      const page = typeof game !== 'undefined' ? game.pages?.getObjectByID?.(pageId) : null;
+      if (!page) throw new Error(`Game page was not found: ${pageId}`);
+      changePage(page);
+      return { id: page.id, name: page.name || null };
+    }, options.actionPage);
+    await page.waitForTimeout(options.durationMs);
+    return { action: 'open_page', page: opened, durationMs: options.durationMs, changed: true };
+  }
+  throw new Error(`Unsupported game action: ${options.gameAction}`);
+}
+
+async function collectGameTestState(page) {
+  return await page.evaluate(() => {
+    const loadedMods = typeof mod !== 'undefined' ? mod.manager?.getLoadedModList?.() || [] : [];
+    let optimizerContext = null;
+    try {
+      optimizerContext = typeof mod !== 'undefined' ? mod.getContext?.('pavr_optimizer') || null : null;
+    } catch {}
+    const modal = document.querySelector('.swal2-popup');
+    const modalStyle = modal ? window.getComputedStyle(modal) : null;
+    const modalVisible = Boolean(modal && modalStyle?.display !== 'none' && modalStyle?.visibility !== 'hidden');
+    const activePage = typeof game !== 'undefined' ? game.activePage?.id || game.activeActionPage?.id || null : null;
+    const activeAction = typeof game !== 'undefined' ? game.activeAction?.id || game.activeAction?.name || null : null;
+    return {
+      loaded: typeof isLoaded !== 'undefined' ? Boolean(isLoaded) : false,
+      inCharacterSelection: typeof inCharacterSelection !== 'undefined' ? Boolean(inCharacterSelection) : null,
+      currentCharacter: typeof currentCharacter !== 'undefined' ? currentCharacter : null,
+      characterName: typeof game !== 'undefined' ? game.characterName || null : null,
+      gamemode: typeof game !== 'undefined' ? { id: game.currentGamemode?.id || null, name: game.currentGamemode?.name || null } : null,
+      activePage,
+      activeAction,
+      gp: typeof game !== 'undefined' ? game.gp?.amount ?? null : null,
+      bankItems: typeof game !== 'undefined' ? game.bank?.items?.length ?? null : null,
+      loadedMods,
+      optimizer: {
+        present: Boolean(
+          optimizerContext ||
+            globalThis.melvorOptimizerSettings ||
+            globalThis.__melvorOptimizerApplyQSA ||
+            globalThis.__melvorOptimizerOriginalQSA
+        ),
+        contextAvailable: Boolean(optimizerContext),
+        inOfflineLoop: optimizerContext?._inOfflineLoop ?? null,
+        settings: globalThis.melvorOptimizerSettings ? { ...globalThis.melvorOptimizerSettings } : null,
+        qsaPatchAvailable: typeof globalThis.__melvorOptimizerApplyQSA === 'function',
+        qsaRestoreAvailable: typeof globalThis.melvorOptimizerRestore === 'function',
+        querySelectorAllPatched: document.querySelectorAll?.name === 'patchedQuerySelectorAll',
+      },
+      readOnlySaveWritesBlocked: globalThis.__mcpBlockedSaveWrites || [],
+      readOnlySaveWriteSummary: Object.values(globalThis.__mcpBlockedSaveWriteSummary || {}),
+      modal: modalVisible
+        ? {
+            title: document.querySelector('.swal2-title')?.textContent?.trim() || '',
+            text: document.querySelector('.swal2-html-container')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          }
+        : null,
+    };
+  });
+}
+
+async function runGameSaveTest(page, options) {
+  const load = await loadGameSave(page, options);
+  const action = await runGameAction(page, options);
+  if (options.gameAction === 'snapshot') await page.waitForTimeout(options.durationMs);
+  const state = await collectGameTestState(page);
+  return {
+    action,
+    load,
+    operation: 'load_save',
+    readOnly: options.readOnly,
+    saveSlot: options.saveSlot,
+    saveSource: options.saveSource,
+    state,
+    warnings: state.modal ? [`A modal is open after loading the save: ${state.modal.title || state.modal.text}`] : [],
+  };
+}
+
 async function run(options) {
   const localInput = options.mode === 'local' && ['add', 'verify_load'].includes(options.operation) ? await buildLocalModInput(options) : null;
   const browser = await chromium.launch({ headless: !options.headful });
@@ -1608,7 +1911,22 @@ async function run(options) {
   const page = await context.newPage();
   options.browserEvents = [];
   const recordBrowserEvent = (event) => {
-    options.browserEvents.push({ ...event, observedAt: new Date().toISOString() });
+    const observedAt = new Date().toISOString();
+    const dedupeKey = JSON.stringify({
+      type: event.type || '',
+      level: event.level || '',
+      text: event.text || '',
+      location: event.location || '',
+      url: event.url || '',
+      failure: event.failure || '',
+    });
+    const previous = options.browserEvents.at(-1);
+    if (previous?.dedupeKey === dedupeKey) {
+      previous.count = (previous.count || 1) + 1;
+      previous.lastObservedAt = observedAt;
+      return;
+    }
+    options.browserEvents.push({ ...event, observedAt, count: 1, dedupeKey });
     if (options.browserEvents.length > 200) options.browserEvents.shift();
   };
   page.on('console', (message) => {
@@ -1682,6 +2000,15 @@ async function run(options) {
       return await attachBrowserReport(
         page,
         { ok: true, mode: options.mode, login, ...summaryState, modioRecoveryActions: options.modioRecoveryActions || [], creatorToolkit },
+        options
+      );
+    }
+
+    if (options.mode === 'game') {
+      const gameTest = await runGameSaveTest(page, options);
+      return await attachBrowserReport(
+        page,
+        { ok: true, mode: options.mode, login, ...summaryState, modioRecoveryActions: options.modioRecoveryActions || [], gameTest },
         options
       );
     }

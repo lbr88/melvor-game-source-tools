@@ -56,6 +56,15 @@ Main tools:
 - `melvor_modding_guides_search`: searches the official modding guide pages.
 - `mod_manager_loaded_mods`: opens Melvor with Playwright and reports installed/loaded Mod Manager mods.
 - `mod_manager_fetch_sources`: exports installed Mod Manager mod resources into ignored `mod-sources/`.
+- `game_save_test`: logs in, loads a configured cloud/local save slot, blocks save writes by default, and writes a screenshot/report.
+- `game_session_start`: starts a persistent, visible Melvor browser session and optionally loads the configured save slot.
+- `game_session_action`: clicks, types, waits, opens game pages, or evaluates page JavaScript in that live session.
+- `game_session_state`: reads the live session state, loaded mods, Optimizer state, browser events, and blocked save writes.
+- `game_session_screenshot`: screenshots the live session without closing it.
+- `game_session_stop`: closes the live session when testing is done.
+- `game_profile_start`: starts tracing and live performance collection on an existing game session.
+- `game_profile_read`: reads current profiling counters while the session keeps running.
+- `game_profile_stop`: stops profiling, writes a trace/report, and leaves the browser open.
 - `mod_test_browser_check`: verifies Playwright Chromium can launch.
 - `mod_test_smoke`: opens Melvor, optionally injects a mod script/folder, and writes an ignored report.
 - `mod_profile_runtime`: captures a Playwright trace/profile into ignored `reports/`.

@@ -5,6 +5,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { chromium } from '@playwright/test';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -38,6 +39,8 @@ const DEFAULT_GUIDES_BASE_URL = process.env.MELVOR_GUIDES_BASE_URL || 'https://w
 const DEFAULT_GUIDES_PREFIX = process.env.MELVOR_GUIDES_PREFIX || 'Mod Creation';
 const DEFAULT_LOCAL_GUIDES_DIR = process.env.MELVOR_LOCAL_GUIDES_DIR || path.join(REPO_ROOT, 'docs', 'modding');
 const LOCAL_SOURCES = ['web', 'android-loaded'];
+const DEFAULT_MELVOR_URL = 'https://melvoridle.com/index_game.php';
+const gameSessions = new Map();
 
 const PRESETS = [
   'classes',
@@ -286,6 +289,153 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {},
+    },
+  },
+  {
+    name: 'game_save_test',
+    title: 'Load And Test A Melvor Save',
+    description: 'Open Melvor with Playwright, log in with .env credentials, load a configured save slot, optionally perform a small browser action, and save screenshot/report artifacts. Save writes are blocked by default.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', default: 'https://melvoridle.com/index_game.php' },
+        saveSlot: { type: 'integer', minimum: 0, description: 'Save slot to load. Defaults to MELVOR_TEST_CHARACTER_SLOT from .env.' },
+        saveSource: { type: 'string', enum: ['cloud', 'local'], default: 'cloud' },
+        gameAction: { type: 'string', enum: ['snapshot', 'wait', 'click_selector', 'open_page'], default: 'snapshot' },
+        actionSelector: { type: 'string', description: 'CSS selector for gameAction=click_selector.' },
+        actionPage: { type: 'string', description: 'Melvor page id for gameAction=open_page, for example melvorD:Woodcutting.' },
+        readOnly: { type: 'boolean', default: true, description: 'Block obvious local/cloud save writes while the test runs.' },
+        durationMs: { type: 'integer', minimum: 0, default: 5000 },
+        timeoutMs: { type: 'integer', minimum: 1000, default: 90000 },
+        waitMs: { type: 'integer', minimum: 0, default: 10000 },
+        headful: { type: 'boolean', default: false },
+        modioRecovery: { type: 'string', enum: ['local', 'reload', 'fail'], default: 'local', description: 'How to handle Melvor mod.io unreachable prompts during browser tests.' },
+        screenshot: { type: 'boolean', default: true, description: 'Save a Playwright page screenshot and JSON report.' },
+        reportDir: { type: 'string', description: 'Output directory for screenshots and JSON reports. Defaults to ignored reports/.' },
+        storageState: { type: 'string', description: 'Optional Playwright storage state file to reuse/save login.' },
+      },
+    },
+  },
+  {
+    name: 'game_session_start',
+    title: 'Start Persistent Melvor Game Session',
+    description: 'Launch a visible Playwright-controlled Melvor browser session, log in, optionally load a configured save, and keep the browser open for later MCP actions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', default: 'default' },
+        replace: { type: 'boolean', default: false, description: 'Close and replace an existing session with the same id.' },
+        url: { type: 'string', default: 'https://melvoridle.com/index_game.php' },
+        saveSlot: { type: 'integer', minimum: 0, description: 'Save slot to load. Defaults to MELVOR_TEST_CHARACTER_SLOT from .env.' },
+        saveSource: { type: 'string', enum: ['cloud', 'local'], default: 'cloud' },
+        loadSave: { type: 'boolean', default: true, description: 'Load the configured save after Mod Manager is ready.' },
+        readOnly: { type: 'boolean', default: true, description: 'Block obvious local/cloud save writes while the session runs.' },
+        headful: { type: 'boolean', default: true, description: 'Show Chromium so the user can watch and direct testing.' },
+        timeoutMs: { type: 'integer', minimum: 1000, default: 90000 },
+        waitMs: { type: 'integer', minimum: 0, default: 10000 },
+        modioRecovery: { type: 'string', enum: ['local', 'reload', 'fail'], default: 'local' },
+        storageState: { type: 'string', description: 'Optional Playwright storage state file to reuse/save login.' },
+      },
+    },
+  },
+  {
+    name: 'game_session_action',
+    title: 'Interact With Persistent Game Session',
+    description: 'Run an action against a live Melvor browser session without closing it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', default: 'default' },
+        action: { type: 'string', enum: ['wait', 'click_selector', 'fill_selector', 'press', 'open_page', 'evaluate'] },
+        selector: { type: 'string', description: 'CSS selector for click_selector, fill_selector, or press.' },
+        text: { type: 'string', description: 'Text for fill_selector.' },
+        key: { type: 'string', description: 'Keyboard key for press.' },
+        pageId: { type: 'string', description: 'Melvor page id for open_page, for example melvorD:Woodcutting.' },
+        script: { type: 'string', description: 'JavaScript expression or async function body to evaluate in the page for action=evaluate.' },
+        durationMs: { type: 'integer', minimum: 0, default: 1000 },
+        timeoutMs: { type: 'integer', minimum: 1000, default: 30000 },
+      },
+      required: ['action'],
+    },
+  },
+  {
+    name: 'game_session_state',
+    title: 'Read Persistent Game Session State',
+    description: 'Inspect a live Melvor browser session, including loaded save, loaded mods, Optimizer state, blocked save writes, and recent browser events.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', default: 'default' },
+        maxBrowserEvents: { type: 'integer', minimum: 0, default: 50 },
+      },
+    },
+  },
+  {
+    name: 'game_session_screenshot',
+    title: 'Screenshot Persistent Game Session',
+    description: 'Capture a screenshot/report for a live Melvor browser session without closing it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', default: 'default' },
+        reportDir: { type: 'string', description: 'Output directory for screenshots/reports. Defaults to ignored reports/.' },
+        fullPage: { type: 'boolean', default: true },
+      },
+    },
+  },
+  {
+    name: 'game_session_stop',
+    title: 'Stop Persistent Game Session',
+    description: 'Close a live Melvor browser session. If profiling is active, stop it and write its trace first.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', default: 'default' },
+      },
+    },
+  },
+  {
+    name: 'game_profile_start',
+    title: 'Start Live Game Profiling',
+    description: 'Start Playwright tracing and in-page performance collection on an existing persistent Melvor game session.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', default: 'default' },
+        label: { type: 'string', default: 'profile' },
+        trace: { type: 'boolean', default: true },
+        screenshots: { type: 'boolean', default: true },
+        snapshots: { type: 'boolean', default: true },
+        sources: { type: 'boolean', default: true },
+        instrumentQuerySelectorAll: { type: 'boolean', default: false, description: 'Wrap the current querySelectorAll to count and time calls until profiling stops.' },
+      },
+    },
+  },
+  {
+    name: 'game_profile_read',
+    title: 'Read Live Game Profiling Data',
+    description: 'Read current performance counters, long tasks, Optimizer state, and browser events from an active or recently stopped profile.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', default: 'default' },
+        maxLongTasks: { type: 'integer', minimum: 0, default: 50 },
+        maxBrowserEvents: { type: 'integer', minimum: 0, default: 50 },
+      },
+    },
+  },
+  {
+    name: 'game_profile_stop',
+    title: 'Stop Live Game Profiling',
+    description: 'Stop profiling on an existing persistent game session, write a trace artifact when enabled, and keep the browser open.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', default: 'default' },
+        reportDir: { type: 'string', description: 'Output directory for trace/report artifacts. Defaults to ignored reports/.' },
+        maxLongTasks: { type: 'integer', minimum: 0, default: 50 },
+        maxBrowserEvents: { type: 'integer', minimum: 0, default: 50 },
+      },
     },
   },
   {
@@ -898,7 +1048,7 @@ async function toolBrowserCheck() {
 
 function appendModManagerArgs(commandArgs, args = {}, mode) {
   commandArgs.push(path.join(REPO_ROOT, 'scripts/mod-manager-sources.mjs'), '--mode', mode);
-  commandArgs.push('--url', args.url || 'https://melvoridle.com/index_game.php');
+  commandArgs.push('--url', args.url || DEFAULT_MELVOR_URL);
   commandArgs.push('--timeout-ms', String(numeric(args.timeoutMs, 90000, 1000)));
   commandArgs.push('--wait-ms', String(numeric(args.waitMs, 10000, 0)));
   if (args.includeDisabled) commandArgs.push('--include-disabled');
@@ -908,6 +1058,863 @@ function appendModManagerArgs(commandArgs, args = {}, mode) {
   if (args.reportDir) commandArgs.push('--report-dir', args.reportDir);
   if (args.storageState) commandArgs.push('--storage-state', args.storageState);
   if (mode === 'fetch') commandArgs.push('--out', args.outDir || DEFAULT_MOD_SOURCES_DIR);
+}
+
+function browserSessionId(args = {}) {
+  return String(args.sessionId || 'default').trim() || 'default';
+}
+
+function configuredSaveSlot(args = {}) {
+  if (args.saveSlot !== undefined) return numeric(args.saveSlot, undefined, 0);
+  const configured = String(process.env.MELVOR_TEST_CHARACTER_SLOT || '').trim();
+  if (!configured) return null;
+  return numeric(configured, undefined, 0);
+}
+
+function authUrlFor(url) {
+  const parsed = new URL(url);
+  parsed.pathname = parsed.pathname.replace(/[^/]*$/, 'index.php');
+  parsed.search = '';
+  parsed.hash = '';
+  return parsed.href;
+}
+
+async function gotoAndSettle(page, url, timeoutMs) {
+  await page.goto(url, { timeout: timeoutMs, waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle', { timeout: timeoutMs }).catch(() => {});
+}
+
+async function newReportDir(root, label) {
+  const dir = path.resolve(root || DEFAULT_REPORTS_DIR, `${label}-${new Date().toISOString().replace(/[:.]/g, '-')}`);
+  await fsp.mkdir(dir, { recursive: true });
+  return dir;
+}
+
+function recordSessionBrowserEvent(session, event) {
+  const observedAt = new Date().toISOString();
+  const dedupeKey = JSON.stringify({
+    type: event.type || '',
+    level: event.level || '',
+    text: event.text || '',
+    location: event.location || '',
+    url: event.url || '',
+    failure: event.failure || '',
+  });
+  const previous = session.browserEvents.at(-1);
+  if (previous?.dedupeKey === dedupeKey) {
+    previous.count = (previous.count || 1) + 1;
+    previous.lastObservedAt = observedAt;
+    return;
+  }
+  session.browserEvents.push({ ...event, observedAt, count: 1, dedupeKey });
+  if (session.browserEvents.length > 500) session.browserEvents.shift();
+}
+
+function visibleBrowserEvents(session, maxBrowserEvents = 50) {
+  const max = numeric(maxBrowserEvents, 50, 0);
+  return session.browserEvents.slice(max === 0 ? session.browserEvents.length : -max).map(({ dedupeKey, ...event }) => event);
+}
+
+async function readModioUnreachablePrompt(page) {
+  return await page
+    .evaluate(() => {
+      const popup = document.querySelector('.swal2-popup');
+      if (!popup) return { present: false };
+      const style = window.getComputedStyle(popup);
+      const visible = style.display !== 'none' && style.visibility !== 'hidden' && !popup.classList.contains('swal2-hide');
+      const title = document.querySelector('.swal2-title')?.textContent?.trim() || '';
+      const body = document.querySelector('.swal2-html-container')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+      const text = `${title}\n${body}`.trim();
+      return {
+        present: Boolean(visible && /mod\.io unreachable|mod\.io service cannot be reached/i.test(text)),
+        title,
+        text,
+      };
+    })
+    .catch(() => ({ present: false }));
+}
+
+async function handleModioUnreachablePrompt(page, options) {
+  const prompt = await readModioUnreachablePrompt(page);
+  if (!prompt.present) return null;
+
+  const action = options.modioRecovery || 'local';
+  const event = {
+    action,
+    title: prompt.title,
+    text: prompt.text,
+    observedAt: new Date().toISOString(),
+  };
+  options.modioRecoveryActions = [...(options.modioRecoveryActions || []), event];
+
+  if (action === 'fail') throw new Error(`mod.io unreachable prompt is open: ${prompt.text}`);
+
+  await page.locator(action === 'reload' ? '.swal2-confirm' : '.swal2-deny').click({ timeout: 5000 });
+  if (action === 'reload') {
+    await page.waitForLoadState('domcontentloaded', { timeout: options.timeoutMs }).catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: options.timeoutMs }).catch(() => {});
+  } else {
+    await page
+      .waitForFunction(
+        () => {
+          const popup = document.querySelector('.swal2-popup');
+          if (!popup) return true;
+          const style = window.getComputedStyle(popup);
+          return style.display === 'none' || style.visibility === 'hidden' || popup.classList.contains('swal2-hide');
+        },
+        undefined,
+        { timeout: 10000 }
+      )
+      .catch(() => {});
+    await page.waitForTimeout(1000).catch(() => {});
+  }
+  return event;
+}
+
+async function isLoggedIn(page) {
+  return await page.evaluate(() => {
+    const playFabLoggedIn =
+      (typeof PlayFabClientSDK !== 'undefined' && PlayFabClientSDK.IsClientLoggedIn?.()) ||
+      (typeof PlayFab !== 'undefined' && PlayFab.ClientApi?.IsClientLoggedIn?.()) ||
+      false;
+    return Boolean(playFabLoggedIn || localStorage.getItem('melvorCloudAuthToken'));
+  });
+}
+
+async function loginIfNeeded(page, options) {
+  if (await isLoggedIn(page)) return { attempted: false, ok: true, reason: 'already logged in' };
+  if (!options.username || !options.password) {
+    return { attempted: false, ok: false, reason: 'missing MELVOR_CLOUD_USERNAME or MELVOR_CLOUD_PASSWORD' };
+  }
+
+  await gotoAndSettle(page, authUrlFor(options.url), options.timeoutMs);
+  await page
+    .evaluate(() => {
+      if (typeof cloudManager !== 'undefined') cloudManager.showSignInContainer?.();
+    })
+    .catch(() => {});
+  await page.waitForSelector('#formElements-signIn-username', { timeout: options.timeoutMs });
+  await page.evaluate(
+    ({ username, password }) => {
+      const usernameInput = document.querySelector('#formElements-signIn-username');
+      const passwordInput = document.querySelector('#formElements-signIn-password');
+      const submit = document.querySelector('#formElements-signIn-submit');
+      if (!usernameInput || !passwordInput || !submit) throw new Error('Melvor Cloud login form was not found.');
+      usernameInput.value = username;
+      passwordInput.value = password;
+      for (const element of [usernameInput, passwordInput]) {
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      submit.click();
+    },
+    { username: options.username, password: options.password }
+  );
+
+  await page.waitForFunction(
+    () =>
+      Boolean(
+        (typeof PlayFabClientSDK !== 'undefined' && PlayFabClientSDK.IsClientLoggedIn?.()) ||
+          (typeof PlayFab !== 'undefined' && PlayFab.ClientApi?.IsClientLoggedIn?.()) ||
+          localStorage.getItem('melvorCloudAuthToken')
+      ),
+    undefined,
+    { timeout: options.timeoutMs }
+  );
+
+  return { attempted: true, ok: true, reason: 'logged in' };
+}
+
+async function waitForModManager(page, options, { navigate = true } = {}) {
+  if (navigate) await gotoAndSettle(page, options.url, options.timeoutMs);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.waitForFunction(
+      () =>
+        Boolean(
+          typeof mod !== 'undefined' &&
+            mod.manager &&
+            typeof mod.manager.getLoadedModList === 'function' &&
+            typeof globalThis.indexedDB === 'object'
+        ),
+      undefined,
+      { timeout: options.timeoutMs }
+    );
+
+    const earlyRecovery = await handleModioUnreachablePrompt(page, options);
+    if (earlyRecovery?.action === 'reload') continue;
+
+    await page
+      .waitForFunction(() => typeof mod === 'undefined' || !mod.manager?.isProcessing?.(), undefined, {
+        timeout: Math.min(options.timeoutMs, 30000),
+      })
+      .catch(() => {});
+    if (options.waitMs > 0) await page.waitForTimeout(options.waitMs);
+
+    const lateRecovery = await handleModioUnreachablePrompt(page, options);
+    if (lateRecovery?.action === 'reload') continue;
+    return;
+  }
+  throw new Error('mod.io unreachable prompt kept reappearing after recovery attempts.');
+}
+
+async function waitForSaveSelection(page, options) {
+  await page.waitForFunction(
+    ({ saveSlot, saveSource }) => {
+      let headers;
+      if (saveSource === 'cloud') {
+        if (typeof cloudSaveHeaders === 'undefined') return false;
+        headers = cloudSaveHeaders;
+      } else {
+        if (typeof localSaveHeaders === 'undefined') return false;
+        headers = localSaveHeaders;
+      }
+      return Boolean(
+        typeof loadCloudSave === 'function' &&
+          typeof loadLocalSave === 'function' &&
+          typeof cloudManager !== 'undefined' &&
+          typeof mod !== 'undefined' &&
+          Array.isArray(headers) &&
+          headers.length > saveSlot
+      );
+    },
+    { saveSlot: options.saveSlot, saveSource: options.saveSource },
+    { timeout: options.timeoutMs }
+  );
+}
+
+async function installReadOnlySaveGuard(page) {
+  return await page.evaluate(() => {
+    const mark = Symbol.for('mcpReadOnlySaveGuardInstalled');
+    if (globalThis[mark]) return { installed: false, alreadyInstalled: true };
+    globalThis[mark] = true;
+    globalThis.__mcpBlockedSaveWrites = [];
+    globalThis.__mcpBlockedSaveWriteSummary = {};
+    const record = (kind, detail = {}) => {
+      const at = new Date().toISOString();
+      const key = JSON.stringify({ kind, detail });
+      const summary = globalThis.__mcpBlockedSaveWriteSummary[key] || {
+        kind,
+        detail,
+        count: 0,
+        firstAt: at,
+        lastAt: at,
+      };
+      summary.count += 1;
+      summary.lastAt = at;
+      globalThis.__mcpBlockedSaveWriteSummary[key] = summary;
+      globalThis.__mcpBlockedSaveWrites.push({ kind, ...detail, at });
+      if (globalThis.__mcpBlockedSaveWrites.length > 25) globalThis.__mcpBlockedSaveWrites.shift();
+      if (summary.count === 1 || summary.count % 250 === 0) {
+        console.warn('[MCP read-only save guard] blocked save write', kind, { ...detail, count: summary.count });
+      }
+    };
+
+    if (typeof saveData === 'function') {
+      globalThis.__mcpOriginalSaveData = saveData;
+      saveData = () => {
+        record('saveData');
+        return false;
+      };
+    }
+
+    const storageSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function guardedSetItem(key, value) {
+      const stringKey = String(key);
+      if (/^MI-(?:test-|beta-)?\d+-.*saveGame$/.test(stringKey)) {
+        record('localStorage.setItem', { key: stringKey });
+        return undefined;
+      }
+      return storageSetItem.call(this, key, value);
+    };
+
+    if (typeof nativeManager !== 'undefined' && typeof nativeManager.saveToNativeCloudBackup === 'function') {
+      nativeManager.saveToNativeCloudBackup = (key, value) => {
+        record('nativeManager.saveToNativeCloudBackup', { key: String(key), bytes: String(value ?? '').length });
+        return false;
+      };
+    }
+
+    if (typeof cloudManager !== 'undefined') {
+      for (const name of ['forceUpdatePlayFabSave', 'saveToSteamCloud', 'deletePlayFabSave', 'deleteFromSteamCloud']) {
+        if (typeof cloudManager[name] !== 'function') continue;
+        const original = cloudManager[name].bind(cloudManager);
+        globalThis[`__mcpOriginalCloudManager_${name}`] = original;
+        cloudManager[name] = (...args) => {
+          record(`cloudManager.${name}`, { args: args.map((arg) => String(arg)).slice(0, 3) });
+          return name === 'forceUpdatePlayFabSave' ? Promise.resolve() : false;
+        };
+      }
+    }
+
+    const updateUserData =
+      typeof PlayFab !== 'undefined' && PlayFab.ClientApi && typeof PlayFab.ClientApi.UpdateUserData === 'function'
+        ? PlayFab.ClientApi.UpdateUserData
+        : null;
+    if (updateUserData) {
+      PlayFab.ClientApi.UpdateUserData = (request, callback) => {
+        const dataKeys = Object.keys(request?.Data || {});
+        const removeKeys = request?.KeysToRemove || [];
+        const touchesSave = [...dataKeys, ...removeKeys].some((key) => /^save\d+(?:_beta|_test)?$/.test(String(key)) || key === 'currentGamemode');
+        if (touchesSave) {
+          record('PlayFab.ClientApi.UpdateUserData', { dataKeys, removeKeys });
+          callback?.({ code: 200, data: { DataVersion: -1 } }, null);
+          return undefined;
+        }
+        return updateUserData.call(PlayFab.ClientApi, request, callback);
+      };
+    }
+
+    return { installed: true, alreadyInstalled: false };
+  });
+}
+
+async function loadGameSaveInSession(page, options) {
+  if (!Number.isInteger(options.saveSlot)) {
+    throw new Error('game_session_start with loadSave=true requires saveSlot or MELVOR_TEST_CHARACTER_SLOT.');
+  }
+  await waitForSaveSelection(page, options);
+  const guard = options.readOnly ? await installReadOnlySaveGuard(page) : { installed: false, disabled: true };
+  const loadResult = await page.evaluate(
+    async ({ saveSlot, saveSource }) => {
+      const headers = saveSource === 'cloud' ? cloudSaveHeaders : localSaveHeaders;
+      const header = headers?.[saveSlot];
+      if (typeof header === 'number') throw new Error(`${saveSource} save slot ${saveSlot} is not loadable; header code ${header}.`);
+      if (!header) throw new Error(`${saveSource} save slot ${saveSlot} was not found.`);
+      if (saveSource === 'cloud') {
+        const saveString = cloudManager.getPlayFabSave(saveSlot);
+        if (!saveString) throw new Error(`Cloud save slot ${saveSlot} has no save string.`);
+        await loadCloudSave(saveSlot);
+      } else {
+        await loadLocalSave(saveSlot);
+      }
+      return {
+        header: {
+          characterName: header.characterName || null,
+          saveVersion: header.saveVersion ?? null,
+          currentGamemode: header.currentGamemode?.id || header.currentGamemode || null,
+          totalSkillLevel: header.totalSkillLevel ?? null,
+          gp: header.gp ?? null,
+          tickTimestamp: header.tickTimestamp ?? null,
+        },
+      };
+    },
+    { saveSlot: options.saveSlot, saveSource: options.saveSource }
+  );
+  await page.waitForFunction(
+    () =>
+      Boolean(
+        typeof game !== 'undefined' &&
+          game.currentGamemode &&
+          typeof isLoaded !== 'undefined' &&
+          isLoaded === true &&
+          typeof inCharacterSelection !== 'undefined' &&
+          inCharacterSelection === false
+      ),
+    undefined,
+    { timeout: options.timeoutMs }
+  );
+  return { guard, ...loadResult };
+}
+
+async function collectGameSessionState(session, args = {}) {
+  const state = await session.page.evaluate(() => {
+    const loadedMods = typeof mod !== 'undefined' ? mod.manager?.getLoadedModList?.() || [] : [];
+    let optimizerContext = null;
+    try {
+      optimizerContext = typeof mod !== 'undefined' ? mod.getContext?.('pavr_optimizer') || null : null;
+    } catch {}
+    const modal = document.querySelector('.swal2-popup');
+    const modalStyle = modal ? window.getComputedStyle(modal) : null;
+    const modalVisible = Boolean(modal && modalStyle?.display !== 'none' && modalStyle?.visibility !== 'hidden');
+    return {
+      location: location.href,
+      title: document.title,
+      isLoggedIn: Boolean(
+        (typeof PlayFabClientSDK !== 'undefined' && PlayFabClientSDK.IsClientLoggedIn?.()) ||
+          (typeof PlayFab !== 'undefined' && PlayFab.ClientApi?.IsClientLoggedIn?.()) ||
+          localStorage.getItem('melvorCloudAuthToken')
+      ),
+      modManager: {
+        isEnabled: Boolean(typeof mod !== 'undefined' && mod.manager?.isEnabled?.()),
+        isProcessing: Boolean(typeof mod !== 'undefined' && mod.manager?.isProcessing?.()),
+        activeProfile: typeof mod !== 'undefined' ? mod.manager?.activeProfile || null : null,
+      },
+      game: {
+        loaded: typeof isLoaded !== 'undefined' ? Boolean(isLoaded) : false,
+        inCharacterSelection: typeof inCharacterSelection !== 'undefined' ? Boolean(inCharacterSelection) : null,
+        currentCharacter: typeof currentCharacter !== 'undefined' ? currentCharacter : null,
+        characterName: typeof game !== 'undefined' ? game.characterName || null : null,
+        gamemode: typeof game !== 'undefined' ? { id: game.currentGamemode?.id || null, name: game.currentGamemode?.name || null } : null,
+        activePage: typeof game !== 'undefined' ? game.activePage?.id || game.activeActionPage?.id || null : null,
+        activeAction: typeof game !== 'undefined' ? game.activeAction?.id || game.activeAction?.name || null : null,
+        gp: typeof game !== 'undefined' ? game.gp?.amount ?? null : null,
+        bankItems: typeof game !== 'undefined' ? game.bank?.items?.length ?? null : null,
+        enableRendering: typeof game !== 'undefined' ? game.enableRendering ?? null : null,
+      },
+      loadedMods,
+      optimizer: {
+        present: Boolean(
+          optimizerContext ||
+            globalThis.melvorOptimizerSettings ||
+            globalThis.__melvorOptimizerApplyQSA ||
+            globalThis.__melvorOptimizerOriginalQSA
+        ),
+        contextAvailable: Boolean(optimizerContext),
+        inOfflineLoop: optimizerContext?._inOfflineLoop ?? null,
+        settings: globalThis.melvorOptimizerSettings ? { ...globalThis.melvorOptimizerSettings } : null,
+        qsaPatchAvailable: typeof globalThis.__melvorOptimizerApplyQSA === 'function',
+        qsaRestoreAvailable: typeof globalThis.melvorOptimizerRestore === 'function',
+        querySelectorAllName: document.querySelectorAll?.name || '',
+        querySelectorAllPatched: document.querySelectorAll?.name === 'patchedQuerySelectorAll',
+      },
+      readOnlySaveWritesBlocked: globalThis.__mcpBlockedSaveWrites || [],
+      readOnlySaveWriteSummary: Object.values(globalThis.__mcpBlockedSaveWriteSummary || {}),
+      profile: globalThis.__mcpProfile
+        ? {
+            active: Boolean(globalThis.__mcpProfile.active),
+            label: globalThis.__mcpProfile.label,
+            startedAtIso: globalThis.__mcpProfile.startedAtIso,
+            stoppedAtIso: globalThis.__mcpProfile.stoppedAtIso || null,
+            durationMs: Math.max(0, performance.now() - globalThis.__mcpProfile.startedAt),
+          }
+        : null,
+      modal: modalVisible
+        ? {
+            title: document.querySelector('.swal2-title')?.textContent?.trim() || '',
+            text: document.querySelector('.swal2-html-container')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          }
+        : null,
+    };
+  });
+
+  return {
+    sessionId: session.id,
+    createdAt: session.createdAt,
+    closed: session.page.isClosed(),
+    ...state,
+    browserEvents: visibleBrowserEvents(session, args.maxBrowserEvents ?? 50),
+  };
+}
+
+async function getGameSession(id = 'default') {
+  const session = gameSessions.get(id);
+  if (!session || session.page.isClosed()) {
+    gameSessions.delete(id);
+    throw new Error(`No live game session named "${id}". Start one with game_session_start.`);
+  }
+  return session;
+}
+
+async function closeGameSession(session) {
+  let stoppedProfile = null;
+  if (session.profile?.active) {
+    stoppedProfile = await stopGameProfile(session, {});
+  }
+  await session.context.close().catch(() => {});
+  await session.browser.close().catch(() => {});
+  gameSessions.delete(session.id);
+  return stoppedProfile;
+}
+
+async function toolGameSessionStart(args = {}) {
+  const id = browserSessionId(args);
+  if (gameSessions.has(id)) {
+    if (!args.replace) throw new Error(`Game session "${id}" is already running. Pass replace=true to close and replace it.`);
+    await closeGameSession(gameSessions.get(id));
+  }
+
+  const options = {
+    id,
+    headful: args.headful !== false,
+    loadSave: args.loadSave !== false,
+    modioRecovery: args.modioRecovery || 'local',
+    password: process.env.MELVOR_CLOUD_PASSWORD || '',
+    readOnly: args.readOnly !== false,
+    saveSlot: configuredSaveSlot(args),
+    saveSource: args.saveSource || 'cloud',
+    storageState: args.storageState || process.env.MELVOR_BROWSER_STORAGE_STATE || '',
+    timeoutMs: numeric(args.timeoutMs, 90000, 1000),
+    url: args.url || DEFAULT_MELVOR_URL,
+    username: process.env.MELVOR_CLOUD_USERNAME || '',
+    waitMs: numeric(args.waitMs, 10000, 0),
+  };
+
+  const browser = await chromium.launch({ headless: !options.headful });
+  const contextOptions = {};
+  if (options.storageState && fs.existsSync(options.storageState)) contextOptions.storageState = options.storageState;
+  const context = await browser.newContext(contextOptions);
+  const page = await context.newPage();
+  const session = {
+    id,
+    browser,
+    context,
+    page,
+    options,
+    browserEvents: [],
+    createdAt: new Date().toISOString(),
+    login: null,
+    load: null,
+    profile: null,
+  };
+
+  page.on('console', (message) => {
+    const location = message.location();
+    recordSessionBrowserEvent(session, {
+      type: 'console',
+      level: message.type(),
+      text: message.text(),
+      location: location.url ? `${location.url}:${location.lineNumber}:${location.columnNumber}` : '',
+    });
+  });
+  page.on('pageerror', (error) => {
+    recordSessionBrowserEvent(session, { type: 'pageerror', text: error.message });
+  });
+  page.on('requestfailed', (request) => {
+    recordSessionBrowserEvent(session, {
+      type: 'requestfailed',
+      url: request.url(),
+      failure: request.failure()?.errorText || '',
+    });
+  });
+
+  try {
+    await gotoAndSettle(page, options.url, options.timeoutMs);
+    session.login = await loginIfNeeded(page, options);
+    await waitForModManager(page, options);
+    if (options.storageState) {
+      await fsp.mkdir(path.dirname(path.resolve(options.storageState)), { recursive: true });
+      await context.storageState({ path: options.storageState });
+    }
+    if (options.loadSave) session.load = await loadGameSaveInSession(page, options);
+    gameSessions.set(id, session);
+    const state = await collectGameSessionState(session, { maxBrowserEvents: 30 });
+    return textContent(JSON.stringify({
+      ok: true,
+      sessionId: id,
+      visible: options.headful,
+      login: session.login,
+      load: session.load,
+      modioRecoveryActions: options.modioRecoveryActions || [],
+      state,
+    }, null, 2));
+  } catch (error) {
+    await context.close().catch(() => {});
+    await browser.close().catch(() => {});
+    throw error;
+  }
+}
+
+async function toolGameSessionAction(args = {}) {
+  const session = await getGameSession(browserSessionId(args));
+  const timeoutMs = numeric(args.timeoutMs, 30000, 1000);
+  const durationMs = numeric(args.durationMs, 1000, 0);
+  let result;
+
+  if (args.action === 'wait') {
+    await session.page.waitForTimeout(durationMs);
+    result = { action: 'wait', durationMs };
+  } else if (args.action === 'click_selector') {
+    if (!args.selector) throw new Error('game_session_action click_selector requires selector.');
+    await session.page.locator(String(args.selector)).first().click({ timeout: timeoutMs });
+    if (durationMs > 0) await session.page.waitForTimeout(durationMs);
+    result = { action: 'click_selector', selector: args.selector, durationMs };
+  } else if (args.action === 'fill_selector') {
+    if (!args.selector) throw new Error('game_session_action fill_selector requires selector.');
+    await session.page.locator(String(args.selector)).first().fill(String(args.text ?? ''), { timeout: timeoutMs });
+    if (durationMs > 0) await session.page.waitForTimeout(durationMs);
+    result = { action: 'fill_selector', selector: args.selector, textLength: String(args.text ?? '').length, durationMs };
+  } else if (args.action === 'press') {
+    if (!args.key) throw new Error('game_session_action press requires key.');
+    if (args.selector) await session.page.locator(String(args.selector)).first().press(String(args.key), { timeout: timeoutMs });
+    else await session.page.keyboard.press(String(args.key));
+    if (durationMs > 0) await session.page.waitForTimeout(durationMs);
+    result = { action: 'press', selector: args.selector || null, key: args.key, durationMs };
+  } else if (args.action === 'open_page') {
+    if (!args.pageId) throw new Error('game_session_action open_page requires pageId.');
+    const opened = await session.page.evaluate((pageId) => {
+      if (typeof changePage !== 'function') throw new Error('changePage was not available.');
+      const page = typeof game !== 'undefined' ? game.pages?.getObjectByID?.(pageId) : null;
+      if (!page) throw new Error(`Game page was not found: ${pageId}`);
+      changePage(page);
+      return { id: page.id, name: page.name || null };
+    }, String(args.pageId));
+    if (durationMs > 0) await session.page.waitForTimeout(durationMs);
+    result = { action: 'open_page', page: opened, durationMs };
+  } else if (args.action === 'evaluate') {
+    if (!args.script) throw new Error('game_session_action evaluate requires script.');
+    const value = await session.page.evaluate(async (script) => {
+      const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+      return await new AsyncFunction(script)();
+    }, String(args.script));
+    if (durationMs > 0) await session.page.waitForTimeout(durationMs);
+    result = { action: 'evaluate', value, durationMs };
+  } else {
+    throw new Error(`Unsupported game session action: ${args.action}`);
+  }
+
+  const state = await collectGameSessionState(session, { maxBrowserEvents: 30 });
+  return textContent(JSON.stringify({ ok: true, sessionId: session.id, result, state }, null, 2));
+}
+
+async function toolGameSessionState(args = {}) {
+  const session = await getGameSession(browserSessionId(args));
+  const state = await collectGameSessionState(session, args);
+  return textContent(JSON.stringify({ ok: true, state }, null, 2));
+}
+
+async function toolGameSessionScreenshot(args = {}) {
+  const session = await getGameSession(browserSessionId(args));
+  const reportDir = await newReportDir(args.reportDir || DEFAULT_REPORTS_DIR, `game-session-${session.id}`);
+  const screenshotPath = path.join(reportDir, 'page.png');
+  await session.page.screenshot({ path: screenshotPath, fullPage: args.fullPage !== false });
+  const state = await collectGameSessionState(session, { maxBrowserEvents: 50 });
+  const report = {
+    ok: true,
+    sessionId: session.id,
+    state,
+    reportDir,
+    screenshotPath,
+    capturedAt: new Date().toISOString(),
+  };
+  await fsp.writeFile(path.join(reportDir, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
+  return textContent(JSON.stringify(report, null, 2));
+}
+
+async function toolGameSessionStop(args = {}) {
+  const session = await getGameSession(browserSessionId(args));
+  const state = await collectGameSessionState(session, { maxBrowserEvents: 50 }).catch(() => null);
+  const stoppedProfile = await closeGameSession(session);
+  return textContent(JSON.stringify({ ok: true, sessionId: session.id, stoppedProfile, finalState: state }, null, 2));
+}
+
+async function startGameProfile(session, args = {}) {
+  if (session.profile?.active) throw new Error(`Profile "${session.profile.label}" is already active for session "${session.id}".`);
+  const trace = args.trace !== false;
+  const label = String(args.label || 'profile');
+  if (trace) {
+    await session.context.tracing.start({
+      screenshots: args.screenshots !== false,
+      snapshots: args.snapshots !== false,
+      sources: args.sources !== false,
+    });
+  }
+
+  const inPage = await session.page.evaluate(
+    ({ label, instrumentQuerySelectorAll }) => {
+      if (globalThis.__mcpProfile?.active) throw new Error(`MCP profile already active: ${globalThis.__mcpProfile.label}`);
+      const profile = {
+        active: true,
+        label,
+        startedAt: performance.now(),
+        startedAtIso: new Date().toISOString(),
+        stoppedAtIso: null,
+        longTasks: [],
+        qsa: {
+          instrumented: false,
+          originalName: document.querySelectorAll?.name || '',
+          count: 0,
+          totalMs: 0,
+          maxMs: 0,
+          slow: [],
+        },
+        offlineEvents: [],
+      };
+      globalThis.__mcpProfile = profile;
+
+      if (!globalThis.__mcpProfileOfflineHooksInstalled && typeof game !== 'undefined' && typeof game.on === 'function') {
+        game.on('offlineLoopEntered', () => {
+          if (globalThis.__mcpProfile?.active) globalThis.__mcpProfile.offlineEvents.push({ type: 'entered', at: performance.now(), atIso: new Date().toISOString() });
+        });
+        game.on('offlineLoopExited', () => {
+          if (globalThis.__mcpProfile?.active) globalThis.__mcpProfile.offlineEvents.push({ type: 'exited', at: performance.now(), atIso: new Date().toISOString() });
+        });
+        globalThis.__mcpProfileOfflineHooksInstalled = true;
+      }
+
+      try {
+        const observer = new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) {
+            profile.longTasks.push({
+              name: entry.name,
+              startTime: entry.startTime,
+              duration: entry.duration,
+            });
+            if (profile.longTasks.length > 500) profile.longTasks.shift();
+          }
+        });
+        observer.observe({ entryTypes: ['longtask'] });
+        profile.longTaskObserver = observer;
+      } catch {
+        profile.longTaskObserver = null;
+      }
+
+      if (instrumentQuerySelectorAll && !globalThis.__mcpProfileOriginalQSA) {
+        const original = document.querySelectorAll;
+        globalThis.__mcpProfileOriginalQSA = original;
+        document.querySelectorAll = function mcpProfiledQuerySelectorAll(selector) {
+          const start = performance.now();
+          try {
+            return original.call(this, selector);
+          } finally {
+            const cost = performance.now() - start;
+            const qsa = globalThis.__mcpProfile?.qsa;
+            if (qsa) {
+              qsa.instrumented = true;
+              qsa.count += 1;
+              qsa.totalMs += cost;
+              qsa.maxMs = Math.max(qsa.maxMs, cost);
+              if (cost >= 1) {
+                qsa.slow.push({ selector: String(selector), cost, at: performance.now() });
+                if (qsa.slow.length > 100) qsa.slow.shift();
+              }
+            }
+          }
+        };
+      }
+
+      return {
+        label,
+        startedAtIso: profile.startedAtIso,
+        instrumentedQuerySelectorAll: Boolean(instrumentQuerySelectorAll && globalThis.__mcpProfileOriginalQSA),
+      };
+    },
+    { label, instrumentQuerySelectorAll: Boolean(args.instrumentQuerySelectorAll) }
+  );
+
+  session.profile = {
+    active: true,
+    label,
+    trace,
+    browserEventStartIndex: session.browserEvents.length,
+    startedAt: new Date().toISOString(),
+  };
+  return inPage;
+}
+
+async function readGameProfile(session, args = {}) {
+  const maxLongTasks = numeric(args.maxLongTasks, 50, 0);
+  const browserEventStartIndex = session.profile?.browserEventStartIndex ?? 0;
+  const maxBrowserEvents = numeric(args.maxBrowserEvents, 50, 0);
+  const profile = await session.page.evaluate(({ maxLongTasks }) => {
+    const activeProfile = globalThis.__mcpProfile || null;
+    const navigation = performance.getEntriesByType('navigation')[0]?.toJSON?.() || null;
+    const resources = performance.getEntriesByType('resource');
+    const resourceSummary = resources.reduce(
+      (summary, entry) => {
+        summary.count += 1;
+        summary.totalDurationMs += entry.duration || 0;
+        summary.totalTransferSize += entry.transferSize || 0;
+        const key = entry.initiatorType || 'unknown';
+        summary.byInitiator[key] = (summary.byInitiator[key] || 0) + 1;
+        return summary;
+      },
+      { count: 0, totalDurationMs: 0, totalTransferSize: 0, byInitiator: {} }
+    );
+    const memory = performance.memory
+      ? {
+          usedJSHeapSize: performance.memory.usedJSHeapSize,
+          totalJSHeapSize: performance.memory.totalJSHeapSize,
+          jsHeapSizeLimit: performance.memory.jsHeapSizeLimit,
+        }
+      : null;
+    return {
+      active: Boolean(activeProfile?.active),
+      label: activeProfile?.label || null,
+      startedAtIso: activeProfile?.startedAtIso || null,
+      stoppedAtIso: activeProfile?.stoppedAtIso || null,
+      durationMs: activeProfile ? Math.max(0, performance.now() - activeProfile.startedAt) : null,
+      longTasks: activeProfile?.longTasks?.slice(maxLongTasks === 0 ? activeProfile.longTasks.length : -maxLongTasks) || [],
+      longTaskCount: activeProfile?.longTasks?.length || 0,
+      qsa: activeProfile?.qsa || null,
+      offlineEvents: activeProfile?.offlineEvents || [],
+      navigation,
+      resources: resourceSummary,
+      memory,
+      querySelectorAllName: document.querySelectorAll?.name || '',
+    };
+  }, { maxLongTasks });
+  const state = await collectGameSessionState(session, { maxBrowserEvents: 0 });
+  const browserEvents = session.browserEvents
+    .slice(browserEventStartIndex)
+    .slice(maxBrowserEvents === 0 ? session.browserEvents.length : -maxBrowserEvents)
+    .map(({ dedupeKey, ...event }) => event);
+  return {
+    sessionId: session.id,
+    profile,
+    traceActive: Boolean(session.profile?.trace && session.profile.active),
+    state: {
+      game: state.game,
+      optimizer: state.optimizer,
+      readOnlySaveWritesBlocked: state.readOnlySaveWritesBlocked,
+      readOnlySaveWriteSummary: state.readOnlySaveWriteSummary,
+      modal: state.modal,
+    },
+    browserEvents,
+  };
+}
+
+async function stopGameProfile(session, args = {}) {
+  if (!session.profile?.active) throw new Error(`No active profile for session "${session.id}".`);
+  const reportDir = await newReportDir(args.reportDir || DEFAULT_REPORTS_DIR, `game-profile-${session.id}-${session.profile.label}`);
+  let tracePath = null;
+  if (session.profile.trace) {
+    tracePath = path.join(reportDir, 'trace.zip');
+    await session.context.tracing.stop({ path: tracePath });
+  }
+  const profile = await session.page.evaluate(() => {
+    const activeProfile = globalThis.__mcpProfile;
+    if (!activeProfile) return null;
+    activeProfile.active = false;
+    activeProfile.stoppedAtIso = new Date().toISOString();
+    try {
+      activeProfile.longTaskObserver?.disconnect?.();
+    } catch {}
+    if (globalThis.__mcpProfileOriginalQSA) {
+      document.querySelectorAll = globalThis.__mcpProfileOriginalQSA;
+      delete globalThis.__mcpProfileOriginalQSA;
+    }
+    return {
+      label: activeProfile.label,
+      startedAtIso: activeProfile.startedAtIso,
+      stoppedAtIso: activeProfile.stoppedAtIso,
+      durationMs: Math.max(0, performance.now() - activeProfile.startedAt),
+      longTaskCount: activeProfile.longTasks?.length || 0,
+      qsa: activeProfile.qsa || null,
+      offlineEvents: activeProfile.offlineEvents || [],
+    };
+  });
+  session.profile.active = false;
+  session.profile.tracePath = tracePath;
+  const summary = await readGameProfile(session, args).catch(() => null);
+  const report = {
+    ok: true,
+    sessionId: session.id,
+    profile,
+    summary,
+    tracePath,
+    reportDir,
+    capturedAt: new Date().toISOString(),
+  };
+  await fsp.writeFile(path.join(reportDir, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
+  return report;
+}
+
+async function toolGameProfileStart(args = {}) {
+  const session = await getGameSession(browserSessionId(args));
+  const profile = await startGameProfile(session, args);
+  return textContent(JSON.stringify({ ok: true, sessionId: session.id, profile }, null, 2));
+}
+
+async function toolGameProfileRead(args = {}) {
+  const session = await getGameSession(browserSessionId(args));
+  const profile = await readGameProfile(session, args);
+  return textContent(JSON.stringify({ ok: true, ...profile }, null, 2));
+}
+
+async function toolGameProfileStop(args = {}) {
+  const session = await getGameSession(browserSessionId(args));
+  const profile = await stopGameProfile(session, args);
+  return textContent(JSON.stringify(profile, null, 2));
 }
 
 async function toolModManagerLoaded(args = {}) {
@@ -949,6 +1956,20 @@ async function toolCreatorToolkitLocalMods(args = {}) {
   if (args.replace) commandArgs.push('--replace');
   if (args.cleanup === false) commandArgs.push('--no-cleanup');
   if (args.apply) commandArgs.push('--apply');
+  const output = run(process.execPath, commandArgs);
+  return textContent(output);
+}
+
+async function toolGameSaveTest(args = {}) {
+  const commandArgs = [];
+  appendModManagerArgs(commandArgs, args, 'game');
+  if (args.saveSlot !== undefined) commandArgs.push('--save-slot', String(numeric(args.saveSlot, undefined, 0)));
+  if (args.saveSource) commandArgs.push('--save-source', String(args.saveSource));
+  if (args.gameAction) commandArgs.push('--game-action', String(args.gameAction));
+  if (args.actionSelector) commandArgs.push('--action-selector', String(args.actionSelector));
+  if (args.actionPage) commandArgs.push('--action-page', String(args.actionPage));
+  if (args.readOnly === false) commandArgs.push('--allow-save-writes');
+  if (args.durationMs !== undefined) commandArgs.push('--duration-ms', String(numeric(args.durationMs, 5000, 0)));
   const output = run(process.execPath, commandArgs);
   return textContent(output);
 }
@@ -1007,6 +2028,15 @@ async function callTool(name, args) {
     if (name === 'mod_manager_configure_mod') return await toolModManagerConfigure(args);
     if (name === 'creator_toolkit_local_mods') return await toolCreatorToolkitLocalMods(args);
     if (name === 'mod_test_browser_check') return await toolBrowserCheck(args);
+    if (name === 'game_save_test') return await toolGameSaveTest(args);
+    if (name === 'game_session_start') return await toolGameSessionStart(args);
+    if (name === 'game_session_action') return await toolGameSessionAction(args);
+    if (name === 'game_session_state') return await toolGameSessionState(args);
+    if (name === 'game_session_screenshot') return await toolGameSessionScreenshot(args);
+    if (name === 'game_session_stop') return await toolGameSessionStop(args);
+    if (name === 'game_profile_start') return await toolGameProfileStart(args);
+    if (name === 'game_profile_read') return await toolGameProfileRead(args);
+    if (name === 'game_profile_stop') return await toolGameProfileStop(args);
     if (name === 'mod_test_smoke') return await toolModSmoke(args);
     if (name === 'mod_profile_runtime') return await toolModProfile(args);
     throw new ProtocolError(-32602, `Unknown tool: ${name}`);
@@ -1132,3 +2162,26 @@ rl.on('line', (line) => {
     send(errorResponse(null, error));
   });
 });
+
+async function closeAllGameSessions() {
+  await Promise.all(
+    [...gameSessions.values()].map(async (session) => {
+      try {
+        await closeGameSession(session);
+      } catch {
+        await session.context?.close?.().catch(() => {});
+        await session.browser?.close?.().catch(() => {});
+      }
+    })
+  );
+}
+
+rl.on('close', () => {
+  closeAllGameSessions().finally(() => process.exit(0));
+});
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.once(signal, () => {
+    closeAllGameSessions().finally(() => process.exit(0));
+  });
+}

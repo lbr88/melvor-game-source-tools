@@ -115,6 +115,11 @@ test('MCP tool schemas are OpenAI-compatible at the top level', async (t) => {
   const toolNames = new Set(tools.map((tool) => tool.name));
   assert.ok(toolNames.has('mod_manager_configure_mod'));
   assert.ok(toolNames.has('creator_toolkit_local_mods'));
+  assert.ok(toolNames.has('game_save_test'));
+  assert.ok(toolNames.has('game_session_start'));
+  assert.ok(toolNames.has('game_session_action'));
+  assert.ok(toolNames.has('game_profile_start'));
+  assert.ok(toolNames.has('game_profile_read'));
 
   const failures = [];
   for (const tool of tools) {
