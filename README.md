@@ -51,6 +51,11 @@ Main tools:
 - `game_source_search`: searches raw local source, readable source, or a git-backed source checkout.
 - `game_source_read`: reads bounded source slices.
 - `game_source_manifest`: reads detected version metadata.
+- `melvor_modding_guides_list`: lists official wiki Mod Creation guide pages.
+- `melvor_modding_guides_read`: reads an official guide page as plain text or wikitext.
+- `melvor_modding_guides_search`: searches the official modding guide pages.
+- `mod_manager_loaded_mods`: opens Melvor with Playwright and reports installed/loaded Mod Manager mods.
+- `mod_manager_fetch_sources`: exports installed Mod Manager mod resources into ignored `mod-sources/`.
 - `mod_test_browser_check`: verifies Playwright Chromium can launch.
 - `mod_test_smoke`: opens Melvor, optionally injects a mod script/folder, and writes an ignored report.
 - `mod_profile_runtime`: captures a Playwright trace/profile into ignored `reports/`.
@@ -86,3 +91,25 @@ npm run mod:profile -- --mod-path /path/to/mod --duration-ms 15000
 ```
 
 Reports, screenshots, and traces are written under ignored `reports/`.
+
+## Mod Manager Sources
+
+Put Melvor Cloud credentials in `.env` when you want browser automation to sign in:
+
+```dotenv
+MELVOR_CLOUD_USERNAME=
+MELVOR_CLOUD_PASSWORD=
+```
+
+Then inspect or export the mods that the in-game Mod Manager has installed:
+
+```bash
+npm run mod-manager:list
+npm run mod-manager:fetch
+```
+
+Fetched mod resources are written under ignored `mod-sources/`, one folder per mod. Each folder includes the mod's original files plus `mod-source.json` metadata, so the folder can be searched, edited locally, smoke-tested, or profiled with the mod testing commands.
+
+## Modding Guides
+
+The MCP guide tools read the official Melvor Idle wiki `Mod Creation` pages through the wiki API. Use `melvor_modding_guides_search` when you need API examples or guide text, and `melvor_modding_guides_read` with `format: "wikitext"` when code examples matter.

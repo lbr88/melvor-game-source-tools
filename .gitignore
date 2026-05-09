@@ -5,6 +5,7 @@ node_modules/
 snapshots/
 game-source/
 game-source-readable/
+mod-sources/
 mods/
 reports/
 playwright-report/

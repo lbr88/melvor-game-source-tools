@@ -32,6 +32,10 @@ const DEFAULT_SOURCE_REPO = process.env.GAME_SOURCE_REPO
   || path.join(REPO_ROOT, 'game-source');
 const DEFAULT_MODS_ROOT = process.env.MELVOR_MODS_ROOT || path.join(REPO_ROOT, 'mods');
 const DEFAULT_REPORTS_DIR = process.env.MELVOR_REPORTS_DIR || path.join(REPO_ROOT, 'reports');
+const DEFAULT_MOD_SOURCES_DIR = process.env.MELVOR_MOD_SOURCES_DIR || path.join(REPO_ROOT, 'mod-sources');
+const DEFAULT_GUIDES_API_URL = process.env.MELVOR_GUIDES_API_URL || 'https://wiki.melvoridle.com/api.php';
+const DEFAULT_GUIDES_BASE_URL = process.env.MELVOR_GUIDES_BASE_URL || 'https://wiki.melvoridle.com/w/';
+const DEFAULT_GUIDES_PREFIX = process.env.MELVOR_GUIDES_PREFIX || 'Mod Creation';
 const LOCAL_SOURCES = ['web', 'android-loaded'];
 
 const PRESETS = [
@@ -56,7 +60,7 @@ const TOOLS = [
       properties: {
         query: { type: 'string', description: 'Regex or literal search pattern. Omit when preset is supplied.' },
         preset: { type: 'string', enum: PRESETS, description: 'Built-in modding-oriented regex preset.' },
-        branch: { type: 'string', default: 'working', description: 'working, current, web, master, android-loaded, all, or another git ref.' },
+        branch: { type: 'string', default: 'working', description: 'working, current, web, main, android-loaded, all, or another git ref.' },
         path: { type: 'string', default: '.', description: 'File or directory path inside the selected source.' },
         context: { type: 'integer', minimum: 0, default: 2 },
         maxLines: { type: 'integer', minimum: 0, default: 120, description: '0 means unlimited.' },
@@ -64,10 +68,6 @@ const TOOLS = [
         filesOnly: { type: 'boolean', default: false },
         repo: { type: 'string', description: 'Override local game-source checkout path.' },
       },
-      anyOf: [
-        { required: ['query'] },
-        { required: ['preset'] },
-      ],
     },
   },
   {
@@ -78,7 +78,7 @@ const TOOLS = [
       type: 'object',
       properties: {
         path: { type: 'string', description: 'File path inside the game-source repo.' },
-        branch: { type: 'string', default: 'working', description: 'working, web, master, android-loaded, or another git ref.' },
+        branch: { type: 'string', default: 'working', description: 'working, web, main, android-loaded, or another git ref.' },
         startLine: { type: 'integer', minimum: 1, default: 1 },
         maxLines: { type: 'integer', minimum: 1, maximum: 1000, default: 200 },
         repo: { type: 'string', description: 'Override local game-source checkout path.' },
@@ -141,6 +141,78 @@ const TOOLS = [
         outDir: { type: 'string', description: 'Override readable output directory.' },
         check: { type: 'boolean', default: false },
         maxBytes: { type: 'integer', minimum: 1, default: 15728640 },
+      },
+    },
+  },
+  {
+    name: 'melvor_modding_guides_list',
+    title: 'List Melvor Modding Guides',
+    description: 'List official Melvor Idle wiki Mod Creation guide pages.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'melvor_modding_guides_read',
+    title: 'Read Melvor Modding Guide',
+    description: 'Read an official Melvor Idle wiki Mod Creation guide page as plain text or wikitext.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        page: { type: 'string', default: 'Mod Creation', description: 'Guide title, for example "Mod Creation/Essentials".' },
+        format: { type: 'string', enum: ['text', 'wikitext'], default: 'text' },
+        maxChars: { type: 'integer', minimum: 0, default: 30000, description: '0 means unlimited.' },
+      },
+    },
+  },
+  {
+    name: 'melvor_modding_guides_search',
+    title: 'Search Melvor Modding Guides',
+    description: 'Search official Melvor Idle wiki Mod Creation guides.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        regex: { type: 'boolean', default: false },
+        ignoreCase: { type: 'boolean', default: true },
+        format: { type: 'string', enum: ['text', 'wikitext'], default: 'text' },
+        contextChars: { type: 'integer', minimum: 0, default: 240 },
+        maxResults: { type: 'integer', minimum: 1, default: 20 },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'mod_manager_loaded_mods',
+    title: 'List Loaded Mod Manager Mods',
+    description: 'Open Melvor with Playwright, use .env login when provided, and report installed/loaded Mod Manager mods.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', default: 'https://melvoridle.com/index_game.php' },
+        includeDisabled: { type: 'boolean', default: false },
+        timeoutMs: { type: 'integer', minimum: 1000, default: 90000 },
+        waitMs: { type: 'integer', minimum: 0, default: 10000 },
+        headful: { type: 'boolean', default: false },
+        storageState: { type: 'string', description: 'Optional Playwright storage state file to reuse/save login.' },
+      },
+    },
+  },
+  {
+    name: 'mod_manager_fetch_sources',
+    title: 'Fetch Loaded Mod Sources',
+    description: 'Export installed Mod Manager mod resources from browser IndexedDB into ignored local mod-sources/ folders.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', default: 'https://melvoridle.com/index_game.php' },
+        outDir: { type: 'string', description: 'Output directory. Defaults to ignored mod-sources/.' },
+        includeDisabled: { type: 'boolean', default: false },
+        timeoutMs: { type: 'integer', minimum: 1000, default: 90000 },
+        waitMs: { type: 'integer', minimum: 0, default: 10000 },
+        headful: { type: 'boolean', default: false },
+        storageState: { type: 'string', description: 'Optional Playwright storage state file to reuse/save login.' },
       },
     },
   },
@@ -255,6 +327,124 @@ function sourceName(value) {
   return value || 'web';
 }
 
+function limitText(text, maxChars) {
+  if (!maxChars || text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars)}\n\n[truncated to ${maxChars} characters]`;
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function guidePageUrl(title) {
+  return `${DEFAULT_GUIDES_BASE_URL}${String(title)
+    .replace(/ /g, '_')
+    .split('/')
+    .map((part) => encodeURIComponent(part))
+    .join('/')}`;
+}
+
+function guideApiUrl(params) {
+  const url = new URL(DEFAULT_GUIDES_API_URL);
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
+  }
+  url.searchParams.set('format', 'json');
+  url.searchParams.set('formatversion', '2');
+  return url;
+}
+
+async function fetchGuideJson(params) {
+  const response = await fetch(guideApiUrl(params), {
+    headers: {
+      accept: 'application/json',
+      'user-agent': `melvor-game-source-tools/${SERVER_VERSION}`,
+    },
+  });
+  if (!response.ok) throw new Error(`Melvor wiki API failed: ${response.status} ${response.statusText}`);
+  const json = await response.json();
+  if (json.error) throw new Error(`Melvor wiki API error: ${json.error.info || json.error.code}`);
+  return json;
+}
+
+async function fetchGuidePages() {
+  const pages = [];
+  let apcontinue;
+  do {
+    const json = await fetchGuideJson({
+      action: 'query',
+      list: 'allpages',
+      apprefix: DEFAULT_GUIDES_PREFIX,
+      apnamespace: 0,
+      aplimit: 'max',
+      apcontinue,
+    });
+    pages.push(...(json.query?.allpages || []));
+    apcontinue = json.continue?.apcontinue;
+  } while (apcontinue);
+
+  return pages
+    .filter((page) => page.title === DEFAULT_GUIDES_PREFIX || page.title.startsWith(`${DEFAULT_GUIDES_PREFIX}/`))
+    .sort((a, b) => a.title.localeCompare(b.title));
+}
+
+async function fetchGuidePage(page, format = 'text') {
+  const title = page || DEFAULT_GUIDES_PREFIX;
+  if (format === 'wikitext') {
+    const json = await fetchGuideJson({
+      action: 'parse',
+      prop: 'wikitext|sections|displaytitle',
+      page: title,
+      redirects: 1,
+    });
+    const parsed = json.parse;
+    if (!parsed) throw new Error(`Melvor guide page not found: ${title}`);
+    return {
+      title: parsed.title,
+      url: guidePageUrl(parsed.title),
+      format,
+      sections: parsed.sections || [],
+      text: parsed.wikitext || '',
+    };
+  }
+
+  const [extractJson, sectionsJson] = await Promise.all([
+    fetchGuideJson({
+      action: 'query',
+      prop: 'extracts|info',
+      explaintext: 1,
+      exsectionformat: 'plain',
+      inprop: 'url',
+      titles: title,
+      redirects: 1,
+    }),
+    fetchGuideJson({
+      action: 'parse',
+      prop: 'sections',
+      page: title,
+      redirects: 1,
+    }),
+  ]);
+  const pageResult = extractJson.query?.pages?.[0];
+  if (!pageResult || pageResult.missing) throw new Error(`Melvor guide page not found: ${title}`);
+  return {
+    title: pageResult.title,
+    pageid: pageResult.pageid,
+    url: pageResult.fullurl || guidePageUrl(pageResult.title),
+    format,
+    sections: sectionsJson.parse?.sections || [],
+    text: pageResult.extract || '',
+  };
+}
+
+function guideSnippet(text, index, length, contextChars) {
+  const start = Math.max(0, index - contextChars);
+  const end = Math.min(text.length, index + length + contextChars);
+  const prefix = start > 0 ? '...' : '';
+  const suffix = end < text.length ? '...' : '';
+  return `${prefix}${text.slice(start, end).replace(/\s+/g, ' ').trim()}${suffix}`;
+}
+
 function isGitRepo(repoPath) {
   const result = spawnSync('git', ['-C', repoPath, 'rev-parse', '--show-toplevel'], {
     encoding: 'utf8',
@@ -316,6 +506,10 @@ async function promoteSnapshot(snapshotDir, sourceStore, source) {
 }
 
 async function toolSearch(args = {}) {
+  if (!args.query && !args.preset) {
+    throw new Error('Missing game source search input. Pass query or preset.');
+  }
+
   const repo = resolveRepo(args.repo);
   const commandArgs = [
     path.join(REPO_ROOT, 'scripts/search-game-source.mjs'),
@@ -475,8 +669,92 @@ async function toolBeautify(args = {}) {
   return textContent(output);
 }
 
+async function toolGuidesList() {
+  const pages = await fetchGuidePages();
+  return textContent(JSON.stringify({
+    api: DEFAULT_GUIDES_API_URL,
+    prefix: DEFAULT_GUIDES_PREFIX,
+    pages: pages.map((page) => ({
+      title: page.title,
+      pageid: page.pageid,
+      url: guidePageUrl(page.title),
+    })),
+  }, null, 2));
+}
+
+async function toolGuidesRead(args = {}) {
+  const maxChars = numeric(args.maxChars, 30000, 0);
+  const page = await fetchGuidePage(args.page || DEFAULT_GUIDES_PREFIX, args.format || 'text');
+  return textContent(JSON.stringify({
+    ...page,
+    text: limitText(page.text, maxChars),
+  }, null, 2));
+}
+
+async function toolGuidesSearch(args = {}) {
+  const query = String(args.query || '');
+  if (!query) throw new Error('Missing guide search query.');
+  const maxResults = numeric(args.maxResults, 20, 1);
+  const contextChars = numeric(args.contextChars, 240, 0);
+  const format = args.format || 'text';
+  const flags = `g${args.ignoreCase === false ? '' : 'i'}`;
+  const pattern = args.regex ? query : escapeRegExp(query);
+  const matcher = new RegExp(pattern, flags);
+  const pages = await fetchGuidePages();
+  const results = [];
+
+  for (const guide of pages) {
+    if (results.length >= maxResults) break;
+    const page = await fetchGuidePage(guide.title, format);
+    let match;
+    while (results.length < maxResults && (match = matcher.exec(page.text)) !== null) {
+      results.push({
+        title: page.title,
+        url: page.url,
+        index: match.index,
+        match: match[0],
+        snippet: guideSnippet(page.text, match.index, match[0].length, contextChars),
+      });
+      if (matcher.lastIndex === match.index) matcher.lastIndex += 1;
+    }
+  }
+
+  return textContent(JSON.stringify({
+    query,
+    regex: Boolean(args.regex),
+    ignoreCase: args.ignoreCase !== false,
+    format,
+    results,
+  }, null, 2));
+}
+
 async function toolBrowserCheck() {
   const output = run(process.execPath, [path.join(REPO_ROOT, 'scripts/mod-test.mjs'), '--mode', 'check']);
+  return textContent(output);
+}
+
+function appendModManagerArgs(commandArgs, args = {}, mode) {
+  commandArgs.push(path.join(REPO_ROOT, 'scripts/mod-manager-sources.mjs'), '--mode', mode);
+  commandArgs.push('--url', args.url || 'https://melvoridle.com/index_game.php');
+  commandArgs.push('--timeout-ms', String(numeric(args.timeoutMs, 90000, 1000)));
+  commandArgs.push('--wait-ms', String(numeric(args.waitMs, 10000, 0)));
+  if (args.includeDisabled) commandArgs.push('--include-disabled');
+  if (args.headful) commandArgs.push('--headful');
+  if (args.storageState) commandArgs.push('--storage-state', args.storageState);
+  if (mode === 'fetch') commandArgs.push('--out', args.outDir || DEFAULT_MOD_SOURCES_DIR);
+}
+
+async function toolModManagerLoaded(args = {}) {
+  const commandArgs = [];
+  appendModManagerArgs(commandArgs, args, 'list');
+  const output = run(process.execPath, commandArgs);
+  return textContent(output);
+}
+
+async function toolModManagerFetchSources(args = {}) {
+  const commandArgs = [];
+  appendModManagerArgs(commandArgs, args, 'fetch');
+  const output = run(process.execPath, commandArgs);
   return textContent(output);
 }
 
@@ -526,6 +804,11 @@ async function callTool(name, args) {
     if (name === 'game_source_branches') return await toolBranches(args);
     if (name === 'game_source_download') return await toolDownload(args);
     if (name === 'game_source_beautify') return await toolBeautify(args);
+    if (name === 'melvor_modding_guides_list') return await toolGuidesList(args);
+    if (name === 'melvor_modding_guides_read') return await toolGuidesRead(args);
+    if (name === 'melvor_modding_guides_search') return await toolGuidesSearch(args);
+    if (name === 'mod_manager_loaded_mods') return await toolModManagerLoaded(args);
+    if (name === 'mod_manager_fetch_sources') return await toolModManagerFetchSources(args);
     if (name === 'mod_test_browser_check') return await toolBrowserCheck(args);
     if (name === 'mod_test_smoke') return await toolModSmoke(args);
     if (name === 'mod_profile_runtime') return await toolModProfile(args);
