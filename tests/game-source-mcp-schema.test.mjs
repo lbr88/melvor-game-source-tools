@@ -170,3 +170,23 @@ test('mutation tools fail before browser launch when required mutation inputs ar
   assert.equal(localResponse.result.isError, true);
   assert.match(localResponse.result.content[0].text, /mod-path/i);
 });
+
+test('local modding docs are readable through guide tools', async (t) => {
+  const client = startServer(t);
+  await initialize(client);
+
+  const response = await client.request('tools/call', {
+    name: 'melvor_modding_guides_read',
+    arguments: {
+      page: 'Local/Creator Toolkit Local Mods',
+      maxChars: 0,
+    },
+  });
+
+  assert.equal(response.error, undefined);
+  assert.equal(response.result.isError, false);
+  const doc = JSON.parse(response.result.content[0].text);
+  assert.equal(doc.source, 'local');
+  assert.match(doc.text, /mct_i--loading-mod/);
+  assert.match(doc.text, /Linked Mod\.io Mods/);
+});

@@ -9,6 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_URL = 'https://melvoridle.com/index_game.php';
 const DEFAULT_OUT_DIR = 'mod-sources';
+const DEFAULT_REPORTS_DIR = 'reports';
 
 function loadDotEnv(filePath) {
   if (!fsSync.existsSync(filePath)) return;
@@ -44,7 +45,9 @@ function parseArgs(argv) {
     password: process.env.MELVOR_CLOUD_PASSWORD || '',
     persist: true,
     profileId: '',
+    reportDir: process.env.MELVOR_REPORTS_DIR || path.join(REPO_ROOT, DEFAULT_REPORTS_DIR),
     replace: false,
+    screenshot: true,
     storageState: process.env.MELVOR_BROWSER_STORAGE_STATE || '',
     timeoutMs: 90000,
     url: DEFAULT_URL,
@@ -88,7 +91,10 @@ function parseArgs(argv) {
     else if (arg === '--no-persist') options.persist = false;
     else if (arg === '--profile-id') options.profileId = nextValue();
     else if (arg.startsWith('--profile-id=')) options.profileId = arg.slice('--profile-id='.length);
+    else if (arg === '--report-dir') options.reportDir = nextValue();
+    else if (arg.startsWith('--report-dir=')) options.reportDir = arg.slice('--report-dir='.length);
     else if (arg === '--replace') options.replace = true;
+    else if (arg === '--no-screenshot') options.screenshot = false;
     else if (arg === '--storage-state') options.storageState = nextValue();
     else if (arg.startsWith('--storage-state=')) options.storageState = arg.slice('--storage-state='.length);
     else if (arg === '--timeout-ms') options.timeoutMs = Number.parseInt(nextValue(), 10);
@@ -118,6 +124,7 @@ function parseArgs(argv) {
   }
 
   options.outDir = path.resolve(options.outDir);
+  options.reportDir = path.resolve(options.reportDir);
   if (options.modPath) options.modPath = path.resolve(options.modPath);
   if (options.directoryPath) options.directoryPath = path.resolve(options.directoryPath);
   return options;
@@ -139,7 +146,9 @@ Options:
   --directory-path <path>  Preserve a directory-link path in Creator Toolkit metadata.
   --apply                  Persist the requested mutation. Without this, mutations are dry-run.
   --no-persist             Update browser localStorage only instead of PlayFab account data.
+  --report-dir <dir>       Output directory for screenshots/reports. Defaults to ${DEFAULT_REPORTS_DIR}/
   --replace                Replace matching local mod when adding.
+  --no-screenshot          Do not save a Playwright page screenshot/report.
   --disabled               Add a Creator Toolkit local mod disabled.
   --username <username>    Melvor Cloud username. Defaults to MELVOR_CLOUD_USERNAME.
   --password <password>    Melvor Cloud password. Defaults to MELVOR_CLOUD_PASSWORD.
@@ -245,13 +254,18 @@ function isNavigationContextError(error) {
 }
 
 async function retryAfterNavigation(page, options, callback) {
-  try {
-    return await callback();
-  } catch (error) {
-    if (!isNavigationContextError(error)) throw error;
-    await waitForModManager(page, options);
-    return await callback();
+  let lastError;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      return await callback();
+    } catch (error) {
+      if (!isNavigationContextError(error)) throw error;
+      lastError = error;
+      await page.waitForTimeout(1000).catch(() => {});
+      await waitForModManager(page, options);
+    }
   }
+  throw lastError;
 }
 
 async function collectModManagerState(page, includeResources) {
@@ -435,6 +449,46 @@ async function collectLocalModFiles(root, currentDir, patterns, files = []) {
     });
   }
   return files.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+async function newReportDir(root, mode) {
+  const dir = path.resolve(root, `${mode}-${new Date().toISOString().replace(/[:.]/g, '-')}`);
+  await fs.mkdir(dir, { recursive: true });
+  return dir;
+}
+
+async function attachBrowserReport(page, result, options) {
+  if (!options.screenshot) return result;
+  const reportDir = await newReportDir(options.reportDir, `mod-manager-${options.mode}`);
+  const screenshotPath = path.join(reportDir, 'page.png');
+  await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {});
+  const report = {
+    ...result,
+    reportDir,
+    screenshotPath,
+    capturedAt: new Date().toISOString(),
+  };
+  await fs.writeFile(path.join(reportDir, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
+  return report;
+}
+
+async function captureFailureScreenshot(page, options, error) {
+  if (!options.screenshot || !page) return null;
+  const reportDir = await newReportDir(options.reportDir, `mod-manager-${options.mode}-error`);
+  const screenshotPath = path.join(reportDir, 'page.png');
+  await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {});
+  await fs.writeFile(
+    path.join(reportDir, 'report.json'),
+    `${JSON.stringify({
+      ok: false,
+      mode: options.mode,
+      error: error instanceof Error ? error.message : String(error),
+      reportDir,
+      screenshotPath,
+      capturedAt: new Date().toISOString(),
+    }, null, 2)}\n`
+  );
+  return screenshotPath;
 }
 
 function parseManifestText(text, label) {
@@ -890,6 +944,46 @@ async function manageCreatorToolkitLocalMods(page, options, localInput = null) {
         if (!manifest.setup && !manifest.load) throw new Error('manifest.json must define either setup or load.');
       }
 
+      function categorizeModIoTags(modIoData) {
+        const platforms = new Set(['Android', 'Browser', 'Desktop', 'iOS']);
+        const tags = (modIoData.tags || []).map((tag) => tag.name).filter(Boolean);
+        return {
+          supportedGameVersion: tags.find((tag) => /^\d+(?:\.\d+){1,2}$/.test(tag)) || '',
+          platforms: tags.filter((tag) => platforms.has(tag)),
+          types: tags.filter((tag) => !platforms.has(tag) && !/^\d+(?:\.\d+){1,2}$/.test(tag)),
+        };
+      }
+
+      function localModfile(modId, packageBytes, packageName) {
+        return {
+          id: -1,
+          mod_id: modId,
+          date_added: 0,
+          date_scanned: 0,
+          virus_status: 0,
+          virus_positive: 0,
+          virustotal_hash: '',
+          filesize: packageBytes.length,
+          filehash: { md5: '' },
+          filename: packageName,
+          version: '0.0.0',
+          changelog: '',
+          metadata_blob: '',
+          download: { binary_url: '', date_expires: 0 },
+        };
+      }
+
+      async function fetchLinkedMod(linkedModId) {
+        if (!Number.isInteger(linkedModId) || linkedModId <= 0) return null;
+        const url = new URL(`https://g-2869.modapi.io/v1/games/2869/mods/${linkedModId}`);
+        url.searchParams.set('api_key', '18d577bc8c3b77469850cf15d56cc97d');
+        const response = await fetch(url.href, { headers: { accept: 'application/json' } });
+        if (!response.ok) throw new Error(`Failed to fetch linked mod.io mod ${linkedModId}: ${response.status} ${response.statusText}`);
+        const linkedMod = await response.json();
+        if (!linkedMod?.id) throw new Error(`mod.io did not return a mod for id ${linkedModId}.`);
+        return linkedMod;
+      }
+
       function normalizeUnpacked(entries) {
         let paths = Object.keys(entries).filter((entry) => entries[entry]?.length);
         if (entries['manifest.json']) return { entries, paths };
@@ -913,6 +1007,7 @@ async function manageCreatorToolkitLocalMods(page, options, localInput = null) {
           directoryPath: record.dir || null,
           loadPriority: record.loadPriority ?? null,
           released: Boolean(record.released),
+          linkedModioUrl: record.mod?.modioUrl || null,
           package: record.package
             ? { name: record.package.name || null, size: record.package.size || 0, type: record.package.type || '' }
             : null,
@@ -921,6 +1016,7 @@ async function manageCreatorToolkitLocalMods(page, options, localInput = null) {
             name: record.mod?.name || null,
             namespace: record.mod?.namespace || null,
             version: record.mod?.version || '',
+            author: record.mod?.author || '',
             setup: record.mod?.setup || null,
             load: record.mod?.load || null,
             icon: record.mod?.icon || null,
@@ -962,32 +1058,34 @@ async function manageCreatorToolkitLocalMods(page, options, localInput = null) {
           if (!file.bytes?.length) continue;
           resources[file.path] = new Blob([file.bytes], { type: file.type || resourceType(file.path) });
         }
-        const displayName = input.requestedName || manifest.name || input.packageName.replace(/\.zip$/i, '');
+        const linkedMod = await fetchLinkedMod(input.linkedModId);
+        const displayName = input.requestedName || linkedMod?.name || manifest.name || input.packageName.replace(/\.zip$/i, '');
         const nextPriority =
           existingLocalMods.reduce((max, record) => Math.max(max, Number(record.loadPriority) || 0), 0) + 1;
-        const linkedModId = Number.isInteger(input.linkedModId) ? input.linkedModId : -1;
+        const linkedModId = linkedMod?.id ?? -1;
+        const linkedModfile = linkedMod ? localModfile(linkedMod.id, packageBytes, input.packageName) : null;
         const modRecord = {
           id: linkedModId > 0 ? linkedModId : -1,
-          name: displayName,
+          name: linkedMod?.name || displayName,
           namespace: manifest.namespace,
-          version: '',
-          tags: {
+          version: linkedModfile?.version || '',
+          tags: linkedMod ? categorizeModIoTags(linkedMod) : {
             supportedGameVersion: typeof gameVersion === 'string' ? gameVersion.substring(1) : '',
             platforms: [],
             types: [],
           },
-          author: '',
-          description: '',
+          author: linkedMod?.submitted_by?.username || '',
+          description: linkedMod?.summary || '',
           icon: manifest.icon,
           setup: manifest.setup,
           load: manifest.load,
           resources,
-          modioUrl: '',
-          homepageUrl: '',
-          dependencies: [],
+          modioUrl: linkedMod?.profile_url || '',
+          homepageUrl: linkedMod?.homepage_url || '',
+          dependencies: linkedMod?.dependencies || [],
           installed: Math.floor(Date.now() / 1000),
-          updated: 0,
-          changelog: '',
+          updated: linkedModfile?.date_added || 0,
+          changelog: linkedModfile?.changelog || '',
         };
         const existing =
           (Number.isInteger(input.localModId) && existingLocalMods.find((record) => Number(record.id) === input.localModId)) ||
@@ -1019,9 +1117,11 @@ async function manageCreatorToolkitLocalMods(page, options, localInput = null) {
         (entry) => Number(entry.id) === 2419237 || entry.namespace === 'creatorToolkit' || entry.name === 'Creator Toolkit'
       );
       const creatorToolkitLoaded = loadedNames.includes('Creator Toolkit');
+      const loadingModGuard = localStorage.getItem('mct_i--loading-mod');
       const warnings = [];
       if (!creatorToolkitInstalled) warnings.push('Creator Toolkit is not installed in Mod Manager.');
       if (!creatorToolkitLoaded) warnings.push('Creator Toolkit is not loaded in the active profile; local mods will not load until it is enabled and the game reloads.');
+      if (loadingModGuard) warnings.push(`Creator Toolkit has a stale localStorage loading guard for local mod id ${loadingModGuard}.`);
 
       if (operation === 'list') {
         return {
@@ -1029,6 +1129,7 @@ async function manageCreatorToolkitLocalMods(page, options, localInput = null) {
           changed: false,
           creatorToolkitInstalled,
           creatorToolkitLoaded,
+          loadingModGuard,
           localMods: localMods.map(summarizeLocalMod),
           operation,
           warnings,
@@ -1044,6 +1145,7 @@ async function manageCreatorToolkitLocalMods(page, options, localInput = null) {
           changed: true,
           creatorToolkitInstalled,
           creatorToolkitLoaded,
+          loadingModGuard,
           operation,
           removed: summarizeLocalMod(existing),
           reloadRequired: true,
@@ -1062,6 +1164,7 @@ async function manageCreatorToolkitLocalMods(page, options, localInput = null) {
           changed,
           creatorToolkitInstalled,
           creatorToolkitLoaded,
+          loadingModGuard,
           localMod: summarizeLocalMod(updated),
           operation,
           reloadRequired: changed,
@@ -1078,6 +1181,7 @@ async function manageCreatorToolkitLocalMods(page, options, localInput = null) {
         changed,
         creatorToolkitInstalled,
         creatorToolkitLoaded,
+        loadingModGuard,
         localMod: summarizeLocalMod(record),
         operation,
         reloadRequired: true,
@@ -1127,21 +1231,27 @@ async function run(options) {
     };
 
     if (options.mode === 'list') {
-      return { ok: true, mode: options.mode, login, ...visibleState };
+      return await attachBrowserReport(page, { ok: true, mode: options.mode, login, ...visibleState }, options);
     }
 
     if (options.mode === 'profile') {
       const profile = await retryAfterNavigation(page, options, () => configureProfileMod(page, options));
-      return { ok: true, mode: options.mode, login, ...summaryState, profile };
+      return await attachBrowserReport(page, { ok: true, mode: options.mode, login, ...summaryState, profile }, options);
     }
 
     if (options.mode === 'local') {
       const creatorToolkit = await retryAfterNavigation(page, options, () => manageCreatorToolkitLocalMods(page, options, localInput));
-      return { ok: true, mode: options.mode, login, ...summaryState, creatorToolkit };
+      return await attachBrowserReport(page, { ok: true, mode: options.mode, login, ...summaryState, creatorToolkit }, options);
     }
 
     const exported = await writeFetchedSources(state, options);
-    return { ok: true, mode: options.mode, login, ...visibleState, exported };
+    return await attachBrowserReport(page, { ok: true, mode: options.mode, login, ...visibleState, exported }, options);
+  } catch (error) {
+    const screenshotPath = await captureFailureScreenshot(page, options, error).catch(() => null);
+    if (screenshotPath && error instanceof Error) {
+      error.message = `${error.message}\nScreenshot: ${screenshotPath}`;
+    }
+    throw error;
   } finally {
     await browser.close();
   }

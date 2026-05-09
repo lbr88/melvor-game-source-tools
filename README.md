@@ -112,4 +112,4 @@ Fetched mod resources are written under ignored `mod-sources/`, one folder per m
 
 ## Modding Guides
 
-The MCP guide tools read the official Melvor Idle wiki `Mod Creation` pages through the wiki API. Use `melvor_modding_guides_search` when you need API examples or guide text, and `melvor_modding_guides_read` with `format: "wikitext"` when code examples matter.
+The MCP guide tools read the official Melvor Idle wiki `Mod Creation` pages through the wiki API and local notes under `docs/modding/`. Use `melvor_modding_guides_search` when you need API examples, guide text, or local source-derived notes, and `melvor_modding_guides_read` with `format: "wikitext"` when official wiki code examples matter. Local docs are returned with titles like `Local/Creator Toolkit Local Mods`.

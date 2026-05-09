@@ -36,6 +36,7 @@ const DEFAULT_MOD_SOURCES_DIR = process.env.MELVOR_MOD_SOURCES_DIR || path.join(
 const DEFAULT_GUIDES_API_URL = process.env.MELVOR_GUIDES_API_URL || 'https://wiki.melvoridle.com/api.php';
 const DEFAULT_GUIDES_BASE_URL = process.env.MELVOR_GUIDES_BASE_URL || 'https://wiki.melvoridle.com/w/';
 const DEFAULT_GUIDES_PREFIX = process.env.MELVOR_GUIDES_PREFIX || 'Mod Creation';
+const DEFAULT_LOCAL_GUIDES_DIR = process.env.MELVOR_LOCAL_GUIDES_DIR || path.join(REPO_ROOT, 'docs', 'modding');
 const LOCAL_SOURCES = ['web', 'android-loaded'];
 
 const PRESETS = [
@@ -147,7 +148,7 @@ const TOOLS = [
   {
     name: 'melvor_modding_guides_list',
     title: 'List Melvor Modding Guides',
-    description: 'List official Melvor Idle wiki Mod Creation guide pages.',
+    description: 'List official Melvor Idle wiki Mod Creation guide pages plus local repo modding notes.',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -156,7 +157,7 @@ const TOOLS = [
   {
     name: 'melvor_modding_guides_read',
     title: 'Read Melvor Modding Guide',
-    description: 'Read an official Melvor Idle wiki Mod Creation guide page as plain text or wikitext.',
+    description: 'Read an official Melvor Idle wiki Mod Creation guide page or local repo modding note as plain text or wikitext.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -169,7 +170,7 @@ const TOOLS = [
   {
     name: 'melvor_modding_guides_search',
     title: 'Search Melvor Modding Guides',
-    description: 'Search official Melvor Idle wiki Mod Creation guides.',
+    description: 'Search official Melvor Idle wiki Mod Creation guides plus local repo modding notes.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -195,6 +196,8 @@ const TOOLS = [
         timeoutMs: { type: 'integer', minimum: 1000, default: 90000 },
         waitMs: { type: 'integer', minimum: 0, default: 10000 },
         headful: { type: 'boolean', default: false },
+        screenshot: { type: 'boolean', default: true, description: 'Save a Playwright page screenshot and JSON report.' },
+        reportDir: { type: 'string', description: 'Output directory for screenshots and JSON reports. Defaults to ignored reports/.' },
         storageState: { type: 'string', description: 'Optional Playwright storage state file to reuse/save login.' },
       },
     },
@@ -212,6 +215,8 @@ const TOOLS = [
         timeoutMs: { type: 'integer', minimum: 1000, default: 90000 },
         waitMs: { type: 'integer', minimum: 0, default: 10000 },
         headful: { type: 'boolean', default: false },
+        screenshot: { type: 'boolean', default: true, description: 'Save a Playwright page screenshot and JSON report.' },
+        reportDir: { type: 'string', description: 'Output directory for screenshots and JSON reports. Defaults to ignored reports/.' },
         storageState: { type: 'string', description: 'Optional Playwright storage state file to reuse/save login.' },
       },
     },
@@ -236,6 +241,8 @@ const TOOLS = [
         timeoutMs: { type: 'integer', minimum: 1000, default: 90000 },
         waitMs: { type: 'integer', minimum: 0, default: 10000 },
         headful: { type: 'boolean', default: false },
+        screenshot: { type: 'boolean', default: true, description: 'Save a Playwright page screenshot and JSON report.' },
+        reportDir: { type: 'string', description: 'Output directory for screenshots and JSON reports. Defaults to ignored reports/.' },
         storageState: { type: 'string', description: 'Optional Playwright storage state file to reuse/save login.' },
       },
       required: ['operation', 'modId'],
@@ -261,6 +268,8 @@ const TOOLS = [
         timeoutMs: { type: 'integer', minimum: 1000, default: 90000 },
         waitMs: { type: 'integer', minimum: 0, default: 10000 },
         headful: { type: 'boolean', default: false },
+        screenshot: { type: 'boolean', default: true, description: 'Save a Playwright page screenshot and JSON report.' },
+        reportDir: { type: 'string', description: 'Output directory for screenshots and JSON reports. Defaults to ignored reports/.' },
         storageState: { type: 'string', description: 'Optional Playwright storage state file to reuse/save login.' },
       },
     },
@@ -494,6 +503,67 @@ function guideSnippet(text, index, length, contextChars) {
   return `${prefix}${text.slice(start, end).replace(/\s+/g, ' ').trim()}${suffix}`;
 }
 
+async function listMarkdownFiles(dir) {
+  if (!fs.existsSync(dir)) return [];
+  const entries = await fsp.readdir(dir, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const entryPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) files.push(...(await listMarkdownFiles(entryPath)));
+    else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) files.push(entryPath);
+  }
+  return files.sort((a, b) => a.localeCompare(b));
+}
+
+function localGuideSections(text) {
+  const sections = [];
+  const headingPattern = /^(#{1,6})\s+(.+)$/gm;
+  let match;
+  while ((match = headingPattern.exec(text)) !== null) {
+    sections.push({
+      level: String(match[1].length),
+      line: match[2].trim(),
+      index: String(sections.length + 1),
+      anchor: match[2].trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
+    });
+  }
+  return sections;
+}
+
+async function localGuideDocs() {
+  const files = await listMarkdownFiles(DEFAULT_LOCAL_GUIDES_DIR);
+  const docs = [];
+  for (const file of files) {
+    const text = await fsp.readFile(file, 'utf8');
+    const firstHeading = text.match(/^#\s+(.+)$/m)?.[1]?.trim();
+    const relativePath = path.relative(DEFAULT_LOCAL_GUIDES_DIR, file).replace(/\\/g, '/');
+    const fallbackTitle = relativePath
+      .replace(/\.md$/i, '')
+      .split('/')
+      .map((part) => part.replace(/[-_]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()))
+      .join('/');
+    const title = `Local/${firstHeading || fallbackTitle}`;
+    docs.push({
+      title,
+      source: 'local',
+      path: file,
+      relativePath,
+      format: 'text',
+      sections: localGuideSections(text),
+      text,
+    });
+  }
+  return docs;
+}
+
+async function findLocalGuide(page) {
+  const requested = String(page || '').replace(/^Local\//i, '').toLowerCase();
+  const docs = await localGuideDocs();
+  return docs.find((doc) => doc.title.toLowerCase() === String(page || '').toLowerCase())
+    || docs.find((doc) => doc.title.replace(/^Local\//i, '').toLowerCase() === requested)
+    || docs.find((doc) => doc.relativePath.replace(/\.md$/i, '').toLowerCase() === requested);
+}
+
 function isGitRepo(repoPath) {
   const result = spawnSync('git', ['-C', repoPath, 'rev-parse', '--show-toplevel'], {
     encoding: 'utf8',
@@ -719,23 +789,45 @@ async function toolBeautify(args = {}) {
 }
 
 async function toolGuidesList() {
-  const pages = await fetchGuidePages();
+  const [pages, localDocs] = await Promise.all([fetchGuidePages(), localGuideDocs()]);
   return textContent(JSON.stringify({
     api: DEFAULT_GUIDES_API_URL,
     prefix: DEFAULT_GUIDES_PREFIX,
-    pages: pages.map((page) => ({
-      title: page.title,
-      pageid: page.pageid,
-      url: guidePageUrl(page.title),
-    })),
+    localDocsDir: DEFAULT_LOCAL_GUIDES_DIR,
+    pages: [
+      ...pages.map((page) => ({
+        title: page.title,
+        pageid: page.pageid,
+        source: 'official',
+        url: guidePageUrl(page.title),
+      })),
+      ...localDocs.map((doc) => ({
+        title: doc.title,
+        source: 'local',
+        path: doc.path,
+      })),
+    ],
   }, null, 2));
 }
 
 async function toolGuidesRead(args = {}) {
   const maxChars = numeric(args.maxChars, 30000, 0);
+  const localDoc = await findLocalGuide(args.page || '');
+  if (localDoc) {
+    return textContent(JSON.stringify({
+      title: localDoc.title,
+      source: 'local',
+      path: localDoc.path,
+      format: args.format || 'text',
+      sections: localDoc.sections,
+      text: limitText(localDoc.text, maxChars),
+    }, null, 2));
+  }
+
   const page = await fetchGuidePage(args.page || DEFAULT_GUIDES_PREFIX, args.format || 'text');
   return textContent(JSON.stringify({
     ...page,
+    source: 'official',
     text: limitText(page.text, maxChars),
   }, null, 2));
 }
@@ -749,8 +841,24 @@ async function toolGuidesSearch(args = {}) {
   const flags = `g${args.ignoreCase === false ? '' : 'i'}`;
   const pattern = args.regex ? query : escapeRegExp(query);
   const matcher = new RegExp(pattern, flags);
-  const pages = await fetchGuidePages();
+  const [pages, localDocs] = await Promise.all([fetchGuidePages(), localGuideDocs()]);
   const results = [];
+
+  for (const doc of localDocs) {
+    if (results.length >= maxResults) break;
+    let match;
+    while (results.length < maxResults && (match = matcher.exec(doc.text)) !== null) {
+      results.push({
+        title: doc.title,
+        source: 'local',
+        path: doc.path,
+        index: match.index,
+        match: match[0],
+        snippet: guideSnippet(doc.text, match.index, match[0].length, contextChars),
+      });
+      if (matcher.lastIndex === match.index) matcher.lastIndex += 1;
+    }
+  }
 
   for (const guide of pages) {
     if (results.length >= maxResults) break;
@@ -759,6 +867,7 @@ async function toolGuidesSearch(args = {}) {
     while (results.length < maxResults && (match = matcher.exec(page.text)) !== null) {
       results.push({
         title: page.title,
+        source: 'official',
         url: page.url,
         index: match.index,
         match: match[0],
@@ -789,6 +898,8 @@ function appendModManagerArgs(commandArgs, args = {}, mode) {
   commandArgs.push('--wait-ms', String(numeric(args.waitMs, 10000, 0)));
   if (args.includeDisabled) commandArgs.push('--include-disabled');
   if (args.headful) commandArgs.push('--headful');
+  if (args.screenshot === false) commandArgs.push('--no-screenshot');
+  if (args.reportDir) commandArgs.push('--report-dir', args.reportDir);
   if (args.storageState) commandArgs.push('--storage-state', args.storageState);
   if (mode === 'fetch') commandArgs.push('--out', args.outDir || DEFAULT_MOD_SOURCES_DIR);
 }
