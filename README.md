@@ -21,7 +21,7 @@ npm install
 cp .env.example .env
 ```
 
-The default standalone source store is ignored `./game-source`. To point at a separate local checkout instead, set `GAME_SOURCE_REPO` in `.env`.
+The default standalone source store is ignored `./game-source`; the MCP docs live in this repo under `docs/modding/` and do not require any outside checkout.
 
 ## MCP
 
@@ -51,9 +51,9 @@ Main tools:
 - `game_source_search`: searches raw local source, readable source, or a git-backed source checkout.
 - `game_source_read`: reads bounded source slices.
 - `game_source_manifest`: reads detected version metadata.
-- `melvor_modding_guides_list`: lists official wiki Mod Creation guide pages.
-- `melvor_modding_guides_read`: reads an official guide page as plain text or wikitext.
-- `melvor_modding_guides_search`: searches the official modding guide pages.
+- `melvor_modding_guides_list`: lists packaged modding docs, recommended use cases, and official wiki Mod Creation guide pages.
+- `melvor_modding_guides_read`: reads a packaged doc or official guide page as plain text or wikitext.
+- `melvor_modding_guides_search`: searches packaged modding docs and official wiki guide pages.
 - `mod_manager_loaded_mods`: opens Melvor with Playwright and reports installed/loaded Mod Manager mods.
 - `mod_manager_fetch_sources`: exports installed Mod Manager mod resources into ignored `mod-sources/`.
 - `game_save_test`: logs in, loads a configured cloud/local save slot, blocks save writes by default, and writes a screenshot/report.
@@ -77,7 +77,7 @@ npm run source:search -- --preset mod-loader --branch all
 npm run source:search -- --branch android-loaded nativeManager
 ```
 
-With standalone storage, `--branch all` searches `game-source/web` and `game-source/android-loaded` when present. If `GAME_SOURCE_REPO` points at a git checkout, named refs use `git grep`.
+With standalone storage, `--branch all` searches `game-source/web` and `game-source/android-loaded` when present.
 
 ## CLI Download And Beautify
 
@@ -86,10 +86,13 @@ npm run source:manifest
 npm run source:refresh
 npm run source:manifest:android
 npm run source:refresh:android
-npm run source:beautify -- --source game-source/web --out game-source-readable/web
+npm run source:beautify
+npm run source:beautify:android
+npm run source:docs
 ```
 
-The CLI refresh commands write ignored staged snapshots under `snapshots/`. The MCP `game_source_download` tool additionally promotes snapshots into ignored `game-source/<source>/`.
+The CLI refresh commands install captured source into ignored `game-source/web/` and `game-source/android-loaded/`. Beautify commands write readable copies into ignored `game-source-readable/web/` and `game-source-readable/android-loaded/`.
+`source:docs` scans `game-source-readable/web/` by default, falls back to `game-source/web/`, and updates `docs/modding/generated-source-reference.md` with compact modding-relevant file/line snippets for MCP search.
 
 ## Mod Testing And Profiling
 
@@ -121,4 +124,4 @@ Fetched mod resources are written under ignored `mod-sources/`, one folder per m
 
 ## Modding Guides
 
-The MCP guide tools read the official Melvor Idle wiki `Mod Creation` pages through the wiki API and local notes under `docs/modding/`. Use `melvor_modding_guides_search` when you need API examples, guide text, or local source-derived notes, and `melvor_modding_guides_read` with `format: "wikitext"` when official wiki code examples matter. Local docs are returned with titles like `Local/Creator Toolkit Local Mods`.
+The MCP guide tools read the official Melvor Idle wiki `Mod Creation` pages through the wiki API and packaged local notes under `docs/modding/`. Start with `melvor_modding_guides_list`: it returns a docs overview, recommended use cases, and the packaged docs index. `docs/modding/README.md` is the human-facing entry point, and the assets/js architecture catalog lives there as `game-source-assets-js.md`, so `melvor_modding_guides_search` works without depending on a separate local checkout. Use `melvor_modding_guides_read` with `format: "wikitext"` when official wiki code examples matter.

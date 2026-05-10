@@ -22,6 +22,8 @@ function parseArgs(argv) {
     tagQualifier: '',
     includeAll: false,
     hashQueryFilenames: false,
+    installTo: '',
+    cleanInstall: false,
     manifestOnly: false,
     maxAssets: DEFAULT_MAX_ASSETS,
     settleMs: DEFAULT_SETTLE_MS,
@@ -38,6 +40,9 @@ function parseArgs(argv) {
 
     if (arg === '--all') options.includeAll = true;
     else if (arg === '--hash-query-filenames') options.hashQueryFilenames = true;
+    else if (arg === '--install-to') options.installTo = nextValue();
+    else if (arg.startsWith('--install-to=')) options.installTo = arg.slice('--install-to='.length);
+    else if (arg === '--clean-install') options.cleanInstall = true;
     else if (arg === '--manifest-only') options.manifestOnly = true;
     else if (arg === '--device') options.device = nextValue();
     else if (arg.startsWith('--device=')) options.device = arg.slice('--device='.length);
@@ -78,7 +83,7 @@ function parseArgs(argv) {
 
   if (!options.outDir) {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    options.outDir = path.join('snapshots', stamp);
+    options.outDir = path.join('/tmp', `melvor-game-source-${stamp}`);
   }
 
   return options;
@@ -89,7 +94,9 @@ function printHelp() {
 
 Options:
   --url <url>          Page to inspect. Defaults to ${DEFAULT_URL}
-  --out <dir>          Output directory. Defaults to snapshots/<timestamp>
+  --out <dir>          Staging output directory. Defaults to /tmp/melvor-game-source-<timestamp>
+  --install-to <dir>   Install captured source into this source store directory, such as game-source/web.
+  --clean-install      Remove --install-to before installing captured source.
   --manifest-only      Record metadata and asset URLs without saving asset bodies.
   --device <name>      Emulate a Playwright device, such as "Pixel 5".
   --source-name <name> Label the source in the manifest, such as "web" or "android-loaded".
@@ -285,6 +292,56 @@ async function prepareOutDir(outDir) {
   }
 }
 
+async function copyDir(source, target) {
+  await fs.mkdir(target, { recursive: true });
+  const entries = await fs.readdir(source, { withFileTypes: true });
+  for (const entry of entries) {
+    const sourcePath = path.join(source, entry.name);
+    const targetPath = path.join(target, entry.name);
+    if (entry.isDirectory()) {
+      await copyDir(sourcePath, targetPath);
+    } else if (entry.isFile()) {
+      await fs.mkdir(path.dirname(targetPath), { recursive: true });
+      await fs.copyFile(sourcePath, targetPath);
+    }
+  }
+}
+
+async function fileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function installCapturedSource(stagingDir, installTo, cleanInstall) {
+  const targetDir = path.resolve(installTo);
+  const assetsDir = path.join(stagingDir, 'assets');
+  const manifestPath = path.join(stagingDir, 'manifest.json');
+
+  if (!(await fileExists(assetsDir))) throw new Error(`Capture has no assets directory: ${assetsDir}`);
+  if (!(await fileExists(manifestPath))) throw new Error(`Capture has no manifest.json: ${manifestPath}`);
+
+  if (cleanInstall) await fs.rm(targetDir, { recursive: true, force: true });
+  await fs.mkdir(targetDir, { recursive: true });
+  await copyDir(assetsDir, targetDir);
+  await fs.copyFile(manifestPath, path.join(targetDir, 'source-manifest.json'));
+
+  const domPath = path.join(stagingDir, 'page-dom.html');
+  if (await fileExists(domPath)) {
+    await fs.copyFile(domPath, path.join(targetDir, 'page-dom.html'));
+  }
+
+  const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+  return {
+    targetDir,
+    sourceVersion: manifest.sourceVersion,
+    summary: manifest.summary,
+  };
+}
+
 async function saveResponseBody(response, outDir, hashQueryFilenames) {
   const body = await response.body();
   const targetPath = outputPathForUrl(response.url(), outDir, hashQueryFilenames);
@@ -468,9 +525,17 @@ async function main() {
 
     await fs.writeFile(path.join(outDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 
-    console.log(`Wrote source snapshot manifest: ${path.relative(process.cwd(), path.join(outDir, 'manifest.json'))}`);
+    let installed = null;
+    if (options.installTo && !options.manifestOnly) {
+      installed = await installCapturedSource(outDir, options.installTo, options.cleanInstall);
+    }
+
+    console.log(`Wrote source capture manifest: ${path.relative(process.cwd(), path.join(outDir, 'manifest.json'))}`);
     console.log(`Observed ${manifest.summary.observedAssetCount} assets; captured ${manifest.summary.capturedAssetCount}; downloaded ${manifest.summary.downloadedAssetCount}.`);
     console.log(`Detected source tag: ${sourceVersion.tag}`);
+    if (installed) {
+      console.log(`Installed source store: ${path.relative(process.cwd(), installed.targetDir) || installed.targetDir}`);
+    }
   } finally {
     await browser.close();
   }

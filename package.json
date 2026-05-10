@@ -6,6 +6,7 @@
   "license": "MIT",
   "bin": {
     "melvor-game-source-beautify": "scripts/beautify-game-source.mjs",
+    "melvor-game-source-extract-modding-docs": "scripts/extract-modding-docs.mjs",
     "melvor-game-source-mcp": "scripts/game-source-mcp.mjs",
     "melvor-mod-manager-sources": "scripts/mod-manager-sources.mjs",
     "melvor-mod-test": "scripts/mod-test.mjs",
@@ -13,7 +14,9 @@
     "melvor-game-source-refresh": "scripts/refresh-game-source.mjs"
   },
   "scripts": {
-    "source:beautify": "node scripts/beautify-game-source.mjs",
+    "source:beautify": "node scripts/beautify-game-source.mjs --source game-source/web --out game-source-readable/web",
+    "source:beautify:android": "node scripts/beautify-game-source.mjs --source game-source/android-loaded --out game-source-readable/android-loaded",
+    "source:docs": "node scripts/extract-modding-docs.mjs",
     "mcp": "node scripts/game-source-mcp.mjs",
     "mod:check": "node scripts/mod-test.mjs --mode check",
     "mod-manager:list": "node scripts/mod-manager-sources.mjs --mode list",
@@ -22,11 +25,11 @@
     "mod:smoke": "node scripts/mod-test.mjs --mode smoke",
     "source:manifest": "node scripts/refresh-game-source.mjs --manifest-only --source-name web --tag-qualifier observed",
     "source:manifest:android": "node scripts/refresh-game-source.mjs --manifest-only --all --device \"Pixel 5\" --source-name android-loaded --tag-qualifier android-loaded --url https://android.melvoridle.com/offlineClientStage3/index_mobile.php",
-    "source:refresh": "node scripts/refresh-game-source.mjs --source-name web --tag-qualifier observed",
-    "source:refresh:android": "node scripts/refresh-game-source.mjs --all --device \"Pixel 5\" --source-name android-loaded --tag-qualifier android-loaded --url https://android.melvoridle.com/offlineClientStage3/index_mobile.php",
+    "source:refresh": "node scripts/refresh-game-source.mjs --all --source-name web --tag-qualifier observed --install-to game-source/web --clean-install",
+    "source:refresh:android": "node scripts/refresh-game-source.mjs --all --device \"Pixel 5\" --source-name android-loaded --tag-qualifier android-loaded --url https://android.melvoridle.com/offlineClientStage3/index_mobile.php --install-to game-source/android-loaded --clean-install",
     "source:search": "node scripts/search-game-source.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check scripts/beautify-game-source.mjs && node --check scripts/game-source-mcp.mjs && node --check scripts/mod-manager-sources.mjs && node --check scripts/mod-test.mjs && node --check scripts/search-game-source.mjs && node --check scripts/refresh-game-source.mjs && node --test tests/*.test.mjs"
+    "check": "node --check scripts/beautify-game-source.mjs && node --check scripts/extract-modding-docs.mjs && node --check scripts/game-source-mcp.mjs && node --check scripts/mod-manager-sources.mjs && node --check scripts/mod-test.mjs && node --check scripts/search-game-source.mjs && node --check scripts/refresh-game-source.mjs && node --test tests/*.test.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.59.1",

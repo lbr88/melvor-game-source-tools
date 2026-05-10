@@ -115,15 +115,15 @@ const TOOLS = [
   },
   {
     name: 'game_source_download',
-    title: 'Download Source Snapshot',
+    title: 'Download Game Source',
     description: 'Download desktop/web or Android-loaded source into the ignored local game-source store. This writes local files only and does not commit or push source.',
     inputSchema: {
       type: 'object',
       properties: {
         source: { type: 'string', enum: ['web', 'android'], default: 'web' },
         repo: { type: 'string', description: 'Local ignored source store path. Defaults to ./game-source beside the MCP server.' },
-        outDir: { type: 'string', description: 'Output directory. Defaults to snapshots/<timestamp>.' },
-        install: { type: 'boolean', default: true, description: 'Promote the staged snapshot into game-source/web or game-source/android-loaded.' },
+        outDir: { type: 'string', description: 'Temporary capture directory. Defaults to /tmp/melvor-game-source-<timestamp>.' },
+        install: { type: 'boolean', default: true, description: 'Install the captured source into game-source/web or game-source/android-loaded.' },
         manifestOnly: { type: 'boolean', default: false },
         includeAll: { type: 'boolean', default: true },
         hashQueryFilenames: { type: 'boolean', default: false },
@@ -151,7 +151,7 @@ const TOOLS = [
   {
     name: 'melvor_modding_guides_list',
     title: 'List Melvor Modding Guides',
-    description: 'List official Melvor Idle wiki Mod Creation guide pages plus local repo modding notes.',
+    description: 'Discover the packaged Melvor modding documentation index and official wiki guide pages. Use this first when a client needs to know what mod-development docs are available.',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -160,11 +160,12 @@ const TOOLS = [
   {
     name: 'melvor_modding_guides_read',
     title: 'Read Melvor Modding Guide',
-    description: 'Read an official Melvor Idle wiki Mod Creation guide page or local repo modding note as plain text or wikitext.',
+    description: 'Read a packaged Melvor modding doc or official wiki guide. Packaged docs include the overview, source asset catalog, local mod-writing patterns, Creator Toolkit notes, browser sessions, and save-test notes.',
     inputSchema: {
       type: 'object',
       properties: {
-        page: { type: 'string', default: 'Mod Creation', description: 'Guide title, for example "Mod Creation/Essentials".' },
+        page: { type: 'string', default: 'README', description: 'Guide title, for example "README", "local-mod-writing-patterns", or "Mod Creation/Essentials".' },
+        section: { type: 'string', description: 'Optional packaged-doc section heading or anchor returned by guide search. Only applies to local packaged docs.' },
         format: { type: 'string', enum: ['text', 'wikitext'], default: 'text' },
         maxChars: { type: 'integer', minimum: 0, default: 30000, description: '0 means unlimited.' },
       },
@@ -173,7 +174,7 @@ const TOOLS = [
   {
     name: 'melvor_modding_guides_search',
     title: 'Search Melvor Modding Guides',
-    description: 'Search official Melvor Idle wiki Mod Creation guides plus local repo modding notes.',
+    description: 'Search packaged Melvor modding docs plus official wiki guides. Use for mod-development questions about ctx.patch, lifecycle hooks, settings, templates, Creator Toolkit local mods, offline processing, source assets, browser sessions, and save tests.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -183,6 +184,7 @@ const TOOLS = [
         format: { type: 'string', enum: ['text', 'wikitext'], default: 'text' },
         contextChars: { type: 'integer', minimum: 0, default: 240 },
         maxResults: { type: 'integer', minimum: 1, default: 20 },
+        includeOfficial: { type: 'boolean', default: true, description: 'Search official wiki guides after packaged docs if more results are needed.' },
       },
       required: ['query'],
     },
@@ -658,6 +660,79 @@ function guideSnippet(text, index, length, contextChars) {
   return `${prefix}${text.slice(start, end).replace(/\s+/g, ' ').trim()}${suffix}`;
 }
 
+function guideSearchTerms(query) {
+  return [...new Set(String(query || '').match(/[A-Za-z0-9_.:-]+/g) || [])]
+    .filter((term) => term.length > 1);
+}
+
+function guideSearchMatch(text, query, { regex = false, ignoreCase = true } = {}) {
+  const flags = `g${ignoreCase ? 'i' : ''}`;
+  if (regex) {
+    const matcher = new RegExp(String(query), flags);
+    const match = matcher.exec(text);
+    if (!match) return null;
+    return {
+      index: match.index,
+      length: match[0].length,
+      match: match[0],
+      score: 100,
+      matchedTerms: [match[0]],
+    };
+  }
+
+  const terms = guideSearchTerms(query);
+  if (terms.length === 0) return null;
+  const phrase = String(query || '').trim();
+  const phraseMatcher = phrase ? new RegExp(escapeRegExp(phrase), flags) : null;
+  const phraseMatch = phraseMatcher?.exec(text);
+  let earliest = phraseMatch?.index ?? Number.POSITIVE_INFINITY;
+  let length = phraseMatch?.[0]?.length ?? 0;
+  let score = phraseMatch ? 1000 : 0;
+  const matchedTerms = [];
+
+  for (const term of terms) {
+    const matcher = new RegExp(escapeRegExp(term), flags);
+    let match;
+    let count = 0;
+    while ((match = matcher.exec(text)) !== null) {
+      count += 1;
+      if (match.index < earliest) {
+        earliest = match.index;
+        length = match[0].length;
+      }
+      if (matcher.lastIndex === match.index) matcher.lastIndex += 1;
+    }
+    if (count > 0) {
+      matchedTerms.push(term);
+      score += 25 + Math.min(count, 5);
+    }
+  }
+
+  if (matchedTerms.length === 0) return null;
+  if (matchedTerms.length === terms.length) score += 100;
+
+  return {
+    index: Number.isFinite(earliest) ? earliest : 0,
+    length: length || matchedTerms[0].length,
+    match: phraseMatch?.[0] || matchedTerms.join(' '),
+    score,
+    matchedTerms,
+  };
+}
+
+function guideAnchor(title) {
+  return String(title || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function lineNumberAt(text, index) {
+  if (index <= 0) return 1;
+  return text.slice(0, index).split(/\r?\n/).length;
+}
+
 async function listMarkdownFiles(dir) {
   if (!fs.existsSync(dir)) return [];
   const entries = await fsp.readdir(dir, { withFileTypes: true });
@@ -675,14 +750,61 @@ function localGuideSections(text) {
   const headingPattern = /^(#{1,6})\s+(.+)$/gm;
   let match;
   while ((match = headingPattern.exec(text)) !== null) {
+    const heading = match[2].trim();
     sections.push({
       level: String(match[1].length),
-      line: match[2].trim(),
+      line: heading,
       index: String(sections.length + 1),
-      anchor: match[2].trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
+      anchor: guideAnchor(heading),
     });
   }
   return sections;
+}
+
+function localGuideChunks(doc) {
+  const headings = [];
+  const headingPattern = /^(#{1,6})\s+(.+)$/gm;
+  let match;
+  while ((match = headingPattern.exec(doc.text)) !== null) {
+    const heading = match[2].trim();
+    headings.push({
+      level: match[1].length,
+      heading,
+      anchor: guideAnchor(heading),
+      index: headings.length + 1,
+      start: match.index,
+    });
+  }
+
+  if (headings.length === 0) {
+    return [{
+      title: doc.title,
+      page: doc.relativePath.replace(/\.md$/i, ''),
+      heading: doc.title.replace(/^Local\//, ''),
+      anchor: 'document',
+      index: 1,
+      level: 1,
+      startLine: 1,
+      endLine: lineNumberAt(doc.text, doc.text.length),
+      text: doc.text,
+    }];
+  }
+
+  return headings.map((heading, index) => {
+    const end = headings[index + 1]?.start ?? doc.text.length;
+    const text = doc.text.slice(heading.start, end).trim();
+    return {
+      title: doc.title,
+      page: doc.relativePath.replace(/\.md$/i, ''),
+      heading: heading.heading,
+      anchor: heading.anchor,
+      index: heading.index,
+      level: heading.level,
+      startLine: lineNumberAt(doc.text, heading.start),
+      endLine: lineNumberAt(doc.text, end),
+      text,
+    };
+  });
 }
 
 async function localGuideDocs() {
@@ -702,6 +824,8 @@ async function localGuideDocs() {
       title,
       source: 'local',
       path: file,
+      root: DEFAULT_LOCAL_GUIDES_DIR,
+      rootTitle: 'Local',
       relativePath,
       format: 'text',
       sections: localGuideSections(text),
@@ -711,13 +835,63 @@ async function localGuideDocs() {
   return docs;
 }
 
+function localGuideAliases(doc) {
+  const aliases = new Set();
+  const title = doc.title.toLowerCase();
+  const relativeNoExt = doc.relativePath.replace(/\.md$/i, '').toLowerCase();
+  const basenameNoExt = path.basename(doc.relativePath).replace(/\.md$/i, '').toLowerCase();
+  aliases.add(title);
+  aliases.add(title.replace(/^local\//i, ''));
+  aliases.add(relativeNoExt);
+  aliases.add(basenameNoExt);
+  const rootTitles = [doc.rootTitle, doc.rootTitle.replace(/^local\/?/i, '')].filter(Boolean);
+  for (const rootTitle of rootTitles) {
+    aliases.add(`${rootTitle}/${relativeNoExt}`.toLowerCase());
+    aliases.add(`${rootTitle}/${basenameNoExt}`.toLowerCase());
+  }
+  return aliases;
+}
+
 async function findLocalGuide(page) {
   const requested = String(page || '').replace(/^Local\//i, '').toLowerCase();
   const docs = await localGuideDocs();
-  return docs.find((doc) => doc.title.toLowerCase() === String(page || '').toLowerCase())
-    || docs.find((doc) => doc.title.replace(/^Local\//i, '').toLowerCase() === requested)
-    || docs.find((doc) => doc.relativePath.replace(/\.md$/i, '').toLowerCase() === requested);
+  return docs.find((doc) => localGuideAliases(doc).has(String(page || '').toLowerCase()))
+    || docs.find((doc) => localGuideAliases(doc).has(requested));
 }
+
+function findLocalGuideChunk(doc, section) {
+  const requested = String(section || '').trim().toLowerCase();
+  if (!requested) return null;
+  return localGuideChunks(doc).find((chunk) => {
+    const aliases = [
+      String(chunk.index),
+      chunk.anchor,
+      chunk.heading.toLowerCase(),
+      `${chunk.page}#${chunk.anchor}`.toLowerCase(),
+    ];
+    return aliases.includes(requested);
+  }) || null;
+}
+
+const LOCAL_GUIDE_HINTS = {
+  'README.md': 'Start here. Overview of packaged docs, common questions, and which guide to read first.',
+  'game-source-assets-js.md': 'Assets/js architecture catalog: bundled files, built modules, mod loader location, and runtime libraries.',
+  'generated-source-reference.md': 'Generated source reference: extracted modding-relevant classes, custom elements, lifecycle hooks, patching, offline processing, and file/line snippets.',
+  'local-mod-writing-patterns.md': 'Practical mod implementation patterns: lifecycle hooks, ctx.patch, offline guards, templates, settings, APIs, DOM observers, and caching.',
+  'creator-toolkit-local-mods.md': 'Creator Toolkit local mods: IndexedDB shape, linked mod.io behavior, load guards, .modignore, and MCP verification.',
+  'live-game-sessions.md': 'Persistent browser sessions, read-only save guards, screenshots, live state reads, and profiling.',
+  'game-save-browser-tests.md': 'One-shot save/browser regression checks and generated reports.',
+};
+
+const GUIDE_USE_CASES = [
+  { question: 'What docs are available?', tool: 'melvor_modding_guides_list', page: 'README' },
+  { question: 'How should a Melvor mod patch game behavior?', tool: 'melvor_modding_guides_search', query: 'ctx.patch before after replace' },
+  { question: 'Where is a modding API symbol in source?', tool: 'melvor_modding_guides_search', query: 'generated source reference patching lifecycle offline custom elements' },
+  { question: 'Which lifecycle hook should a mod use?', tool: 'melvor_modding_guides_search', query: 'onCharacterLoaded onInterfaceReady' },
+  { question: 'How should a mod handle offline processing?', tool: 'melvor_modding_guides_search', query: 'offlineLoopEntered loadingOfflineProgress OfflineLoadingElement' },
+  { question: 'How do local Creator Toolkit mods load?', tool: 'melvor_modding_guides_read', page: 'creator-toolkit-local-mods' },
+  { question: 'How do I test a mod safely in the browser?', tool: 'melvor_modding_guides_read', page: 'live-game-sessions' },
+];
 
 function isGitRepo(repoPath) {
   const result = spawnSync('git', ['-C', repoPath, 'rev-parse', '--show-toplevel'], {
@@ -736,47 +910,6 @@ function localSourceDir(repoPath, branch) {
   const candidate = path.join(repoPath, selected);
   if (fs.existsSync(candidate)) return candidate;
   return null;
-}
-
-async function copyDir(source, target) {
-  await fsp.mkdir(target, { recursive: true });
-  const entries = await fsp.readdir(source, { withFileTypes: true });
-  for (const entry of entries) {
-    const sourcePath = path.join(source, entry.name);
-    const targetPath = path.join(target, entry.name);
-    if (entry.isDirectory()) {
-      await copyDir(sourcePath, targetPath);
-    } else if (entry.isFile()) {
-      await fsp.mkdir(path.dirname(targetPath), { recursive: true });
-      await fsp.copyFile(sourcePath, targetPath);
-    }
-  }
-}
-
-async function promoteSnapshot(snapshotDir, sourceStore, source) {
-  const assetsDir = path.join(snapshotDir, 'assets');
-  const manifestPath = path.join(snapshotDir, 'manifest.json');
-  const targetDir = path.join(sourceStore, source);
-
-  if (!fs.existsSync(assetsDir)) throw new Error(`Snapshot has no assets directory: ${assetsDir}`);
-  if (!fs.existsSync(manifestPath)) throw new Error(`Snapshot has no manifest.json: ${manifestPath}`);
-
-  await fsp.rm(targetDir, { recursive: true, force: true });
-  await fsp.mkdir(targetDir, { recursive: true });
-  await copyDir(assetsDir, targetDir);
-  await fsp.copyFile(manifestPath, path.join(targetDir, 'source-manifest.json'));
-
-  const domPath = path.join(snapshotDir, 'page-dom.html');
-  if (fs.existsSync(domPath)) {
-    await fsp.copyFile(domPath, path.join(targetDir, 'page-dom.html'));
-  }
-
-  const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'));
-  return {
-    targetDir,
-    sourceVersion: manifest.sourceVersion,
-    summary: manifest.summary,
-  };
 }
 
 async function toolSearch(args = {}) {
@@ -883,10 +1016,10 @@ async function toolDownload(args = {}) {
   const sourceStore = resolveRepo(args.repo);
   const normalizedSource = sourceName(source);
   const outDir = args.outDir
-    || path.join(REPO_ROOT, 'snapshots', `${new Date().toISOString().replace(/[:.]/g, '-')}-${normalizedSource}`);
+    || path.join('/tmp', `melvor-game-source-${new Date().toISOString().replace(/[:.]/g, '-')}-${normalizedSource}`);
   const commandArgs = [path.join(REPO_ROOT, 'scripts/refresh-game-source.mjs')];
 
-    if (source === 'android') {
+  if (source === 'android') {
     commandArgs.push(
       '--all',
       '--device',
@@ -906,21 +1039,28 @@ async function toolDownload(args = {}) {
   if (args.manifestOnly) commandArgs.push('--manifest-only');
   if (args.hashQueryFilenames) commandArgs.push('--hash-query-filenames');
   commandArgs.push('--out', outDir);
+  const installDir = path.join(sourceStore, normalizedSource);
+  if (install) commandArgs.push('--install-to', installDir, '--clean-install');
   if (args.maxAssets) commandArgs.push('--max-assets', String(numeric(args.maxAssets, 500, 1)));
   if (args.timeoutMs) commandArgs.push('--timeout-ms', String(numeric(args.timeoutMs, 45000, 1000)));
   if (args.settleMs !== undefined) commandArgs.push('--settle-ms', String(numeric(args.settleMs, 3000, 0)));
 
   const output = run(process.execPath, commandArgs);
-  let promoted = null;
+  let installedStore = null;
   if (install) {
-    promoted = await promoteSnapshot(outDir, sourceStore, normalizedSource);
+    const manifest = JSON.parse(await fsp.readFile(path.join(installDir, 'source-manifest.json'), 'utf8'));
+    installedStore = {
+      targetDir: installDir,
+      sourceVersion: manifest.sourceVersion,
+      summary: manifest.summary,
+    };
   }
 
   return textContent(JSON.stringify({
     output,
-    snapshotDir: outDir,
-    installed: Boolean(promoted),
-    promoted,
+    stagingDir: outDir,
+    installed: Boolean(installedStore),
+    installedStore,
   }, null, 2));
 }
 
@@ -945,9 +1085,36 @@ async function toolBeautify(args = {}) {
 
 async function toolGuidesList() {
   const [pages, localDocs] = await Promise.all([fetchGuidePages(), localGuideDocs()]);
+  const packagedDocs = localDocs.map((doc) => ({
+    title: doc.title,
+    page: doc.relativePath.replace(/\.md$/i, ''),
+    source: 'local',
+    path: doc.path,
+    root: doc.root,
+    relativePath: doc.relativePath,
+    summary: LOCAL_GUIDE_HINTS[doc.relativePath] || 'Packaged local Melvor modding documentation.',
+    sections: doc.sections.map((section) => ({
+      heading: section.line,
+      anchor: section.anchor,
+      level: section.level,
+    })),
+  }));
+
   return textContent(JSON.stringify({
-    api: DEFAULT_GUIDES_API_URL,
-    prefix: DEFAULT_GUIDES_PREFIX,
+    overview: {
+      description: 'Packaged Melvor modding docs are available under docs/modding and are searchable without any separate local game-source checkout.',
+      startHere: {
+        title: 'Local/Melvor Modding Docs Overview',
+        page: 'README',
+      },
+      useCases: GUIDE_USE_CASES,
+    },
+    packagedDocs,
+    officialWiki: {
+      api: DEFAULT_GUIDES_API_URL,
+      prefix: DEFAULT_GUIDES_PREFIX,
+      available: true,
+    },
     localDocsDir: DEFAULT_LOCAL_GUIDES_DIR,
     pages: [
       ...pages.map((page) => ({
@@ -956,11 +1123,7 @@ async function toolGuidesList() {
         source: 'official',
         url: guidePageUrl(page.title),
       })),
-      ...localDocs.map((doc) => ({
-        title: doc.title,
-        source: 'local',
-        path: doc.path,
-      })),
+      ...packagedDocs,
     ],
   }, null, 2));
 }
@@ -969,13 +1132,28 @@ async function toolGuidesRead(args = {}) {
   const maxChars = numeric(args.maxChars, 30000, 0);
   const localDoc = await findLocalGuide(args.page || '');
   if (localDoc) {
+    const selectedSection = args.section === undefined ? null : findLocalGuideChunk(localDoc, args.section);
+    if (args.section !== undefined && !selectedSection) {
+      throw new Error(`Local guide section not found: ${args.section}`);
+    }
+    const text = selectedSection?.text ?? localDoc.text;
     return textContent(JSON.stringify({
       title: localDoc.title,
       source: 'local',
       path: localDoc.path,
       format: args.format || 'text',
       sections: localDoc.sections,
-      text: limitText(localDoc.text, maxChars),
+      section: selectedSection
+        ? {
+            heading: selectedSection.heading,
+            anchor: selectedSection.anchor,
+            index: String(selectedSection.index),
+            level: String(selectedSection.level),
+            startLine: selectedSection.startLine,
+            endLine: selectedSection.endLine,
+          }
+        : null,
+      text: limitText(text, maxChars),
     }, null, 2));
   }
 
@@ -993,42 +1171,63 @@ async function toolGuidesSearch(args = {}) {
   const maxResults = numeric(args.maxResults, 20, 1);
   const contextChars = numeric(args.contextChars, 240, 0);
   const format = args.format || 'text';
-  const flags = `g${args.ignoreCase === false ? '' : 'i'}`;
-  const pattern = args.regex ? query : escapeRegExp(query);
-  const matcher = new RegExp(pattern, flags);
-  const [pages, localDocs] = await Promise.all([fetchGuidePages(), localGuideDocs()]);
+  const localDocs = await localGuideDocs();
   const results = [];
+  const searchOptions = {
+    regex: Boolean(args.regex),
+    ignoreCase: args.ignoreCase !== false,
+  };
+  const localResults = [];
 
   for (const doc of localDocs) {
-    if (results.length >= maxResults) break;
-    let match;
-    while (results.length < maxResults && (match = matcher.exec(doc.text)) !== null) {
-      results.push({
+    for (const chunk of localGuideChunks(doc)) {
+      const match = guideSearchMatch(chunk.text, query, searchOptions);
+      if (!match) continue;
+      localResults.push({
         title: doc.title,
         source: 'local',
         path: doc.path,
+        page: chunk.page,
+        section: {
+          heading: chunk.heading,
+          anchor: chunk.anchor,
+          index: String(chunk.index),
+          level: String(chunk.level),
+          startLine: chunk.startLine,
+          endLine: chunk.endLine,
+        },
+        read: {
+          page: chunk.page,
+          section: chunk.anchor,
+        },
         index: match.index,
-        match: match[0],
-        snippet: guideSnippet(doc.text, match.index, match[0].length, contextChars),
+        match: match.match,
+        score: match.score,
+        matchedTerms: match.matchedTerms,
+        snippet: guideSnippet(chunk.text, match.index, match.length, contextChars),
       });
-      if (matcher.lastIndex === match.index) matcher.lastIndex += 1;
     }
   }
 
+  localResults.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title) || a.section.index - b.section.index);
+  results.push(...localResults.slice(0, maxResults));
+
+  const pages = args.includeOfficial === false || results.length >= maxResults ? [] : await fetchGuidePages();
   for (const guide of pages) {
     if (results.length >= maxResults) break;
     const page = await fetchGuidePage(guide.title, format);
-    let match;
-    while (results.length < maxResults && (match = matcher.exec(page.text)) !== null) {
+    const match = guideSearchMatch(page.text, query, searchOptions);
+    if (match) {
       results.push({
         title: page.title,
         source: 'official',
         url: page.url,
         index: match.index,
-        match: match[0],
-        snippet: guideSnippet(page.text, match.index, match[0].length, contextChars),
+        match: match.match,
+        score: match.score,
+        matchedTerms: match.matchedTerms,
+        snippet: guideSnippet(page.text, match.index, match.length, contextChars),
       });
-      if (matcher.lastIndex === match.index) matcher.lastIndex += 1;
     }
   }
 

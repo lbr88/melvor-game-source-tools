@@ -1,0 +1,971 @@
+# Generated Melvor Modding Source Reference
+
+Generated at: 2026-05-10T09:52:07.770Z
+
+Source root: `game-source-readable/web`
+
+Output path: `docs/modding/generated-source-reference.md`
+
+This document is generated from local Melvor client source. It is intentionally compact: it points mod authors and AI agents at high-signal files, symbols, events, and snippets instead of copying large client files.
+
+Regenerate with:
+
+```bash
+npm run source:docs
+```
+
+## Scan Summary
+
+- Files scanned: 145
+- Files skipped: 0
+- Selected classes: 200
+- Custom elements: 247
+
+## Selected Classes
+
+- `Agility extends GatheringSkill` - `melvoridle.com/assets/js/built/agility.js:286`
+- `AgilityRenderQueue extends GatheringSkillRenderQueue` - `melvoridle.com/assets/js/built/agility.js:1641`
+- `BuiltAgilityObstacleElement extends HTMLElement` - `melvoridle.com/assets/js/built/agilityMenus.js:4`
+- `PassivePillarMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/agilityMenus.js:150`
+- `AgilityObstacleSelectionElement extends HTMLElement` - `melvoridle.com/assets/js/built/agilityMenus.js:215`
+- `InlineRequirementElement extends HTMLElement` - `melvoridle.com/assets/js/built/agilityMenus.js:389`
+- `MultiProgressBarElement extends HTMLElement` - `melvoridle.com/assets/js/built/agilityMenus.js:428`
+- `AgilityBreakdownElement extends HTMLElement` - `melvoridle.com/assets/js/built/agilityMenus.js:533`
+- `AltMagic extends CraftingSkill` - `melvoridle.com/assets/js/built/altMagic.js:142`
+- `AltMagicRenderQueue extends GatheringSkillRenderQueue` - `melvoridle.com/assets/js/built/altMagic.js:935`
+- `AltMagicMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/altMagicMenu.js:2`
+- `AltMagicItemMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/altMagicMenu.js:166`
+- `AncientRelicElement extends HTMLElement` - `melvoridle.com/assets/js/built/ancientRelics.js:80`
+- `AncientRelicsMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/ancientRelics.js:108`
+- `ArchaeologyDigSite extends BasicSkillRecipe` - `melvoridle.com/assets/js/built/archaeology.js:92`
+- `ArchaeologyRenderQueue extends GatheringSkillRenderQueue` - `melvoridle.com/assets/js/built/archaeology.js:226`
+- `Archaeology extends GatheringSkill` - `melvoridle.com/assets/js/built/archaeology.js:275`
+- `ArchaeologyMuseumRenderQueue` - `melvoridle.com/assets/js/built/archaeology.js:1002`
+- `DigSiteMapSelectElement extends HTMLElement` - `melvoridle.com/assets/js/built/archaeologyMenu.js:2`
+- `ArchaeologyDigSiteContainerElement extends HTMLElement` - `melvoridle.com/assets/js/built/archaeologyMenu.js:76`
+- `ArtefactDropListElement extends HTMLElement` - `melvoridle.com/assets/js/built/archaeologyMenu.js:318`
+- `ArchaeologyMuseumItemElement extends HTMLElement` - `melvoridle.com/assets/js/built/archaeologyMenu.js:384`
+- `ArchaeologyMuseumElement extends HTMLElement` - `melvoridle.com/assets/js/built/archaeologyMenu.js:465`
+- `ArtisanMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/artisanMenu.js:2`
+- `HerbloreArtisanMenuElement extends ArtisanMenuElement` - `melvoridle.com/assets/js/built/artisanMenu.js:178`
+- `ArtisanSkill extends CraftingSkill` - `melvoridle.com/assets/js/built/artisanSkill.js:3`
+- `ArtisanSkillRenderQueue extends GatheringSkillRenderQueue` - `melvoridle.com/assets/js/built/artisanSkill.js:258`
+- `ArtisanSkillRecipe extends BasicSkillRecipe` - `melvoridle.com/assets/js/built/artisanSkill.js:272`
+- `CategorizedArtisanRecipe extends ArtisanSkillRecipe` - `melvoridle.com/assets/js/built/artisanSkill.js:300`
+- `SingleProductArtisanSkillRecipe extends CategorizedArtisanRecipe` - `melvoridle.com/assets/js/built/artisanSkill.js:319`
+- `AstrologyModifier` - `melvoridle.com/assets/js/built/astrology.js:2`
+- `AstrologyRecipe extends BasicSkillRecipe` - `melvoridle.com/assets/js/built/astrology.js:73`
+- `Astrology extends GatheringSkill` - `melvoridle.com/assets/js/built/astrology.js:232`
+- `AstrologyRenderQueue extends GatheringSkillRenderQueue` - `melvoridle.com/assets/js/built/astrology.js:1123`
+- `ConstellationMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/astrologyMenus.js:4`
+- `LockedConstellationMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/astrologyMenus.js:143`
+- `AstrologyModifierDisplayElement extends HTMLElement` - `melvoridle.com/assets/js/built/astrologyMenus.js:182`
+- `AstrologyExplorationPanelElement extends HTMLElement` - `melvoridle.com/assets/js/built/astrologyMenus.js:280`
+- `AstrologyInformationPanelElement extends HTMLElement` - `melvoridle.com/assets/js/built/astrologyMenus.js:430`
+- `BankRenderQueue` - `melvoridle.com/assets/js/built/bank2.js:92`
+- `Bank extends GameEventEmitter` - `melvoridle.com/assets/js/built/bank2.js:123`
+- `BankItem` - `melvoridle.com/assets/js/built/bank2.js:1693`
+- `GolbinRaidBank extends Bank` - `melvoridle.com/assets/js/built/bank2.js:1736`
+- `BankItemIconElement extends HTMLElement` - `melvoridle.com/assets/js/built/bankMenus.js:4`
+- `BankTabMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/bankMenus.js:172`
+- `BankTabDropdownMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/bankMenus.js:543`
+- `BankOptionsMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/bankMenus.js:588`
+- `BankMoveModeMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/bankMenus.js:623`
+- `BankSellModeMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/bankMenus.js:649`
+- `BankRangeSlider` - `melvoridle.com/assets/js/built/bankMenus.js:683`
+- `BankSelectedItemMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/bankMenus.js:783`
+- `BankItemStatsMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/bankMenus.js:1314`
+- `BankMinibarToggleElement extends HTMLElement` - `melvoridle.com/assets/js/built/bankMenus.js:1387`
+- `BankItemSettingsMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/bankMenus.js:1414`
+- `BankSidebarMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/bankMenus.js:1465`
+- `SummoningMaxHitElement extends HTMLElement` - `melvoridle.com/assets/js/built/bankMenus.js:1522`
+- `ItemUpgradeMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/bankMenus.js:1554`
+- `BaseManager extends NamespacedObject` - `melvoridle.com/assets/js/built/baseManager.js:3`
+- `ManagerRenderQueue` - `melvoridle.com/assets/js/built/baseManager.js:694`
+- `CartographyOfflineSnapshot` - `melvoridle.com/assets/js/built/cartography.js:33`
+- `CartographyRenderQueue extends SkillRenderQueue` - `melvoridle.com/assets/js/built/cartography.js:45`
+- `Cartography extends Skill` - `melvoridle.com/assets/js/built/cartography.js:137`
+- `WorldMapDisplayElement extends HTMLElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:41`
+- `HexOverviewElement extends HTMLElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:2419`
+- `SurveyOverviewElement extends HTMLElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:2622`
+- `WorldMapFilterElement extends HTMLElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:2670`
+- `ImageSearchResultElement extends HTMLElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:2703`
+- `PoiSearchResultElement extends HTMLElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:2723`
+- `CreateMapMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:2757`
+- `DigSiteSelectMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:2791`
+- `PaperMakingMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:2887`
+- `DigSiteMapInfoElement extends HTMLElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:2974`
+- `MapUpgradeMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:3030`
+- `MapRefinementMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:3155`
+- `HexTooltipElement extends HTMLElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:3280`
+- `MapMasteryMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:3431`
+- `MapMasteryBonusElement extends HTMLElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:3469`
+- `PoiDiscoveryCostsElement extends HTMLElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:3525`
+- `CharacterCombatStats` - `melvoridle.com/assets/js/built/character.js:2113`
+- `CharacterRenderQueue` - `melvoridle.com/assets/js/built/character.js:2272`
+- `CharacterDisplayElement extends HTMLElement` - `melvoridle.com/assets/js/built/characterSelectMenus.js:2`
+- `SaveSlotDisplayElement extends HTMLElement` - `melvoridle.com/assets/js/built/characterSelectMenus.js:190`
+- `GamemodeSelectionElement extends HTMLElement` - `melvoridle.com/assets/js/built/characterSelectMenus.js:358`
+- `CombatAreaMenu` - `melvoridle.com/assets/js/built/combatAreas.js:2`
+- `CombatAreaMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatAreas.js:77`
+- `MonsterSelectTableElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatAreas.js:890`
+- `MonsterSelectTableRowElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatAreas.js:969`
+- `DungeonSelectElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatAreas.js:1023`
+- `AbyssDepthSelectElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatAreas.js:1045`
+- `StrongholdSelectElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatAreas.js:1156`
+- `CombatAreaMenuManager` - `melvoridle.com/assets/js/built/combatAreas.js:1182`
+- `CombatArea extends RealmedObject` - `melvoridle.com/assets/js/built/combatAreas.js:1242`
+- `CombatAreaCategory extends NamespacedObject` - `melvoridle.com/assets/js/built/combatAreas.js:1891`
+- `ViewMonsterListTableElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatAreas.js:1938`
+- `ViewMonsterListTableRowElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatAreas.js:1978`
+- `CombatEffectDamageGroup` - `melvoridle.com/assets/js/built/combatEffects.js:2`
+- `CombatEffectStatGroup` - `melvoridle.com/assets/js/built/combatEffects.js:15`
+- `CombatEffectTTSpan` - `melvoridle.com/assets/js/built/combatEffects.js:34`
+- `CombatEffectLangTTSpan extends CombatEffectTTSpan` - `melvoridle.com/assets/js/built/combatEffects.js:80`
+- `CombatEffectStringTTSpan extends CombatEffectTTSpan` - `melvoridle.com/assets/js/built/combatEffects.js:100`
+- `CombatEffectStatsTTSpan extends CombatEffectTTSpan` - `melvoridle.com/assets/js/built/combatEffects.js:120`
+- `CombatEffectTurnsTTSpan extends CombatEffectTTSpan` - `melvoridle.com/assets/js/built/combatEffects.js:138`
+- `CombatEffectStacksWithMaxTTSpan extends CombatEffectTTSpan` - `melvoridle.com/assets/js/built/combatEffects.js:191`
+- `CombatEffectGroup extends NamespacedObject` - `melvoridle.com/assets/js/built/combatEffects.js:226`
+- `CombatBehaviourTrigger` - `melvoridle.com/assets/js/built/combatEffects.js:263`
+- `CombatEffectBehaviour` - `melvoridle.com/assets/js/built/combatEffects.js:531`
+- `ModifyBehaviour extends CombatEffectBehaviour` - `melvoridle.com/assets/js/built/combatEffects.js:625`
+- `ModifyStatsBehaviour extends ModifyBehaviour` - `melvoridle.com/assets/js/built/combatEffects.js:640`
+- `ModifyParameterBehaviour extends ModifyBehaviour` - `melvoridle.com/assets/js/built/combatEffects.js:650`
+- `UpdatePrayerModifiersBehaviour extends CombatEffectBehaviour` - `melvoridle.com/assets/js/built/combatEffects.js:774`
+- `CombatEffectRenderListener` - `melvoridle.com/assets/js/built/combatEffects.js:814`
+- `CombatEffect extends NamespacedObject` - `melvoridle.com/assets/js/built/combatEffects.js:883`
+- `CombatEffectTemplate extends NamespacedObject` - `melvoridle.com/assets/js/built/combatEffects.js:1066`
+- `CombatEffectParameterChangedEvent extends GameEvent` - `melvoridle.com/assets/js/built/combatEffects.js:1243`
+- `CombatEffectStatsChangedEvent extends GameEvent` - `melvoridle.com/assets/js/built/combatEffects.js:1258`
+- `CombatEffectTimerFiredEvent extends GameEvent` - `melvoridle.com/assets/js/built/combatEffects.js:1275`
+- `CombatEffectAppliedEvent extends GameEvent` - `melvoridle.com/assets/js/built/combatEffects.js:1288`
+- `CombatEffectReappliedEvent extends GameEvent` - `melvoridle.com/assets/js/built/combatEffects.js:1301`
+- `CombatEffectRemovedEvent extends GameEvent` - `melvoridle.com/assets/js/built/combatEffects.js:1314`
+- `CombatEffectTable extends NamespacedObject` - `melvoridle.com/assets/js/built/combatEffects.js:1320`
+- `CombatEffectApplicator` - `melvoridle.com/assets/js/built/combatEffects.js:1342`
+- `TableCombatEffectApplicator extends CombatEffectApplicator` - `melvoridle.com/assets/js/built/combatEffects.js:1575`
+- `SingleCombatEffectApplicator extends CombatEffectApplicator` - `melvoridle.com/assets/js/built/combatEffects.js:1620`
+- `ActiveCombatEffect extends GameEventEmitter` - `melvoridle.com/assets/js/built/combatEffects.js:1690`
+- `CombatLoot` - `melvoridle.com/assets/js/built/combatLoot.js:2`
+- `CombatLootMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatLoot.js:148`
+- `CombatEvent extends NamespacedObject` - `melvoridle.com/assets/js/built/combatManager.js:17`
+- `CombatManager extends BaseManager` - `melvoridle.com/assets/js/built/combatManager.js:34`
+- `CombatPassiveSpanElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatMenus.js:2`
+- `EnemyPassivesElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatMenus.js:19`
+- `SpecialAttackSpanElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatMenus.js:56`
+- `EnemySpecialAttacksElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatMenus.js:82`
+- `EvasionTableElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatMenus.js:123`
+- `ResistanceSpanElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatMenus.js:168`
+- `ResistanceTableElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatMenus.js:189`
+- `DefensiveStatsElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatMenus.js:241`
+- `OffensiveStatsElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatMenus.js:265`
+- `CombatLevelsElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatMenus.js:336`
+- `TriangleDamageTooltipElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatMenus.js:435`
+- `PlayerStatsElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatMenus.js:477`
+- `MonsterStatsElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatMenus.js:648`
+- `CombatSkill extends Skill` - `melvoridle.com/assets/js/built/combatSkills.js:3`
+- `Attack extends CombatSkill` - `melvoridle.com/assets/js/built/combatSkills.js:15`
+- `Strength extends CombatSkill` - `melvoridle.com/assets/js/built/combatSkills.js:34`
+- `Defence extends CombatSkill` - `melvoridle.com/assets/js/built/combatSkills.js:53`
+- `Hitpoints extends CombatSkill` - `melvoridle.com/assets/js/built/combatSkills.js:72`
+- `Ranged extends CombatSkill` - `melvoridle.com/assets/js/built/combatSkills.js:108`
+- `PrayerRenderQueue extends SkillRenderQueue` - `melvoridle.com/assets/js/built/combatSkills.js:127`
+- `Prayer extends CombatSkill` - `melvoridle.com/assets/js/built/combatSkills.js:133`
+- `Slayer extends CombatSkill` - `melvoridle.com/assets/js/built/combatSkills.js:170`
+- `CombatTriangleSet extends NamespacedObject` - `melvoridle.com/assets/js/built/combatTriangle.js:2`
+- `CombatTriangleSetTableElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatTriangle.js:136`
+- `CombaTriangleSetTableRowElement extends HTMLElement` - `melvoridle.com/assets/js/built/combatTriangle.js:181`
+- `SkillCompletionElement extends HTMLElement` - `melvoridle.com/assets/js/built/completionLog.js:566`
+- `MasteryCompletionElement extends HTMLElement` - `melvoridle.com/assets/js/built/completionLog.js:678`
+- `ItemCompletionElement extends HTMLElement` - `melvoridle.com/assets/js/built/completionLog.js:719`
+- `MonsterCompletionElement extends HTMLElement` - `melvoridle.com/assets/js/built/completionLog.js:775`
+- `PetCompletionElement extends HTMLElement` - `melvoridle.com/assets/js/built/completionLog.js:831`
+- `CompletionRenderQueue` - `melvoridle.com/assets/js/built/completionLog.js:905`
+- `LangStringElement extends HTMLElement` - `melvoridle.com/assets/js/built/components.js:2`
+- `ItemChargeDisplayElement extends HTMLElement` - `melvoridle.com/assets/js/built/components.js:27`
+- `SettingsCheckboxElement extends HTMLElement` - `melvoridle.com/assets/js/built/components.js:73`
+- `SettingsSwitchElement extends HTMLElement` - `melvoridle.com/assets/js/built/components.js:116`
+- `SettingsDropdownElement extends HTMLElement` - `melvoridle.com/assets/js/built/components.js:193`
+- `UpgradeChainDisplayElement extends HTMLElement` - `melvoridle.com/assets/js/built/components.js:227`
+- `SkillMilestoneDisplayElement extends HTMLElement` - `melvoridle.com/assets/js/built/components.js:281`
+- `CharacterResistanceElement extends HTMLElement` - `melvoridle.com/assets/js/built/components.js:369`
+- `ConditionalModifierCondition` - `melvoridle.com/assets/js/built/conditionalModifiers.js:33`
+- `ItemInBankCondition extends ValueCondition` - `melvoridle.com/assets/js/built/conditionalModifiers.js:91`
+- `CombatEffectGroupCondition extends CharacterBooleanCondition` - `melvoridle.com/assets/js/built/conditionalModifiers.js:293`
+- `CombatEffectCondition extends CharacterBooleanCondition` - `melvoridle.com/assets/js/built/conditionalModifiers.js:328`
+- `ConditionalModifier` - `melvoridle.com/assets/js/built/conditionalModifiers.js:630`
+- `CookingRecipe extends SingleProductArtisanSkillRecipe` - `melvoridle.com/assets/js/built/cooking.js:2`
+- `CookingCategory extends SkillCategory` - `melvoridle.com/assets/js/built/cooking.js:31`
+- `Cooking extends CraftingSkill` - `melvoridle.com/assets/js/built/cooking.js:75`
+- `CookingRenderQueue extends GatheringSkillRenderQueue` - `melvoridle.com/assets/js/built/cooking.js:938`
+- `CookingMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/cookingMenu.js:2`
+- `CookingRecipeSelectionElement extends HTMLElement` - `melvoridle.com/assets/js/built/cookingMenu.js:210`
+- `LockedCookingRecipeElement extends HTMLElement` - `melvoridle.com/assets/js/built/cookingMenu.js:304`
+- `Corruption extends CombatSkill` - `melvoridle.com/assets/js/built/corruption.js:127`
+- `CorruptionMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/corruption.js:184`
+- `CorruptionElementElement extends HTMLElement` - `melvoridle.com/assets/js/built/corruption.js:213`
+- `Crafting extends ArtisanSkill` - `melvoridle.com/assets/js/built/crafting.js:2`
+- `CraftingRecipe extends SingleProductArtisanSkillRecipe` - `melvoridle.com/assets/js/built/crafting.js:245`
+- `SplashManager` - `melvoridle.com/assets/js/built/damageSplash.js:2`
+- `EffectRenderer` - `melvoridle.com/assets/js/built/effectRenderer.js:2`
+- `EnemyRenderQueue extends CharacterRenderQueue` - `melvoridle.com/assets/js/built/enemy.js:545`
+- `EquipmentSetMenu` - `melvoridle.com/assets/js/built/equipment.js:497`
+- `EquipmentGridIconElement extends HTMLElement` - `melvoridle.com/assets/js/built/equipment.js:684`
+- `EquipmentGridElement extends HTMLElement` - `melvoridle.com/assets/js/built/equipment.js:800`
+- `EquipmentTooltipElement extends HTMLElement` - `melvoridle.com/assets/js/built/equipment.js:889`
+- `QuickEquipTooltipElement extends HTMLElement` - `melvoridle.com/assets/js/built/equipment.js:963`
+- `FoodSelectOptionElement extends HTMLElement` - `melvoridle.com/assets/js/built/equippedFood.js:128`
+- `FoodSelectMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/equippedFood.js:162`
+- `EventManager` - `melvoridle.com/assets/js/built/eventManager.js:2`
+- `CombatEventMenuElement extends HTMLElement` - `melvoridle.com/assets/js/built/eventMenu.js:2`
+- `CombatEffectNumberTranspiler extends ExprTranspiler` - `melvoridle.com/assets/js/built/expressionBuilder.js:882`
+- `ModifierValueTranspiler extends ExprTranspiler` - `melvoridle.com/assets/js/built/expressionBuilder.js:934`
+- `FarmingCategory extends SkillCategory` - `melvoridle.com/assets/js/built/farming2.js:35`
+- `FarmingRenderQueue extends MasterySkillRenderQueue` - `melvoridle.com/assets/js/built/farming2.js:155`
+
+## Custom Elements
+
+- `<built-agility-obstacle>` -> `BuiltAgilityObstacleElement` - `melvoridle.com/assets/js/built/agilityMenus.js:149`
+- `<passive-pillar-menu>` -> `PassivePillarMenuElement` - `melvoridle.com/assets/js/built/agilityMenus.js:213`
+- `<agility-obstacle-selection>` -> `AgilityObstacleSelectionElement` - `melvoridle.com/assets/js/built/agilityMenus.js:388`
+- `<inline-requirement>` -> `InlineRequirementElement` - `melvoridle.com/assets/js/built/agilityMenus.js:427`
+- `<multi-progress-bar>` -> `MultiProgressBarElement` - `melvoridle.com/assets/js/built/agilityMenus.js:532`
+- `<agility-breakdown>` -> `AgilityBreakdownElement` - `melvoridle.com/assets/js/built/agilityMenus.js:651`
+- `<alt-magic-menu>` -> `AltMagicMenuElement` - `melvoridle.com/assets/js/built/altMagicMenu.js:165`
+- `<alt-magic-item-menu>` -> `AltMagicItemMenuElement` - `melvoridle.com/assets/js/built/altMagicMenu.js:244`
+- `<ancient-relic>` -> `AncientRelicElement` - `melvoridle.com/assets/js/built/ancientRelics.js:107`
+- `<dig-site-map-select>` -> `DigSiteMapSelectElement` - `melvoridle.com/assets/js/built/archaeologyMenu.js:75`
+- `<archaeology-dig-site-container>` -> `ArchaeologyDigSiteContainerElement` - `melvoridle.com/assets/js/built/archaeologyMenu.js:317`
+- `<artefact-drop-list>` -> `ArtefactDropListElement` - `melvoridle.com/assets/js/built/archaeologyMenu.js:383`
+- `<archaeology-museum-item>` -> `ArchaeologyMuseumItemElement` - `melvoridle.com/assets/js/built/archaeologyMenu.js:456`
+- `<archaeology-museum>` -> `ArchaeologyMuseumElement` - `melvoridle.com/assets/js/built/archaeologyMenu.js:553`
+- `<artisan-menu>` -> `ArtisanMenuElement` - `melvoridle.com/assets/js/built/artisanMenu.js:177`
+- `<herblore-artisan-menu>` -> `HerbloreArtisanMenuElement` - `melvoridle.com/assets/js/built/artisanMenu.js:242`
+- `<constellation-menu>` -> `ConstellationMenuElement` - `melvoridle.com/assets/js/built/astrologyMenus.js:141`
+- `<locked-constellation-menu>` -> `LockedConstellationMenuElement` - `melvoridle.com/assets/js/built/astrologyMenus.js:178`
+- `<astrology-modifier-display>` -> `AstrologyModifierDisplayElement` - `melvoridle.com/assets/js/built/astrologyMenus.js:278`
+- `<astrology-exploration-panel>` -> `AstrologyExplorationPanelElement` - `melvoridle.com/assets/js/built/astrologyMenus.js:428`
+- `<astrology-information-panel>` -> `AstrologyInformationPanelElement` - `melvoridle.com/assets/js/built/astrologyMenus.js:468`
+- `<bank-item-icon>` -> `BankItemIconElement` - `melvoridle.com/assets/js/built/bankMenus.js:171`
+- `<bank-tab-menu>` -> `BankTabMenuElement` - `melvoridle.com/assets/js/built/bankMenus.js:541`
+- `<bank-tab-dropdown-menu>` -> `BankTabDropdownMenuElement` - `melvoridle.com/assets/js/built/bankMenus.js:587`
+- `<bank-options-menu>` -> `BankOptionsMenuElement` - `melvoridle.com/assets/js/built/bankMenus.js:622`
+- `<bank-move-mode-menu>` -> `BankMoveModeMenuElement` - `melvoridle.com/assets/js/built/bankMenus.js:648`
+- `<bank-sell-mode-menu>` -> `BankSellModeMenuElement` - `melvoridle.com/assets/js/built/bankMenus.js:681`
+- `<bank-selected-item-menu>` -> `BankSelectedItemMenuElement` - `melvoridle.com/assets/js/built/bankMenus.js:1312`
+- `<bank-item-stats-menu>` -> `BankItemStatsMenuElement` - `melvoridle.com/assets/js/built/bankMenus.js:1386`
+- `<bank-minibar-toggle>` -> `BankMinibarToggleElement` - `melvoridle.com/assets/js/built/bankMenus.js:1412`
+- `<bank-item-settings-menu>` -> `BankItemSettingsMenuElement` - `melvoridle.com/assets/js/built/bankMenus.js:1463`
+- `<bank-sidebar-menu>` -> `BankSidebarMenuElement` - `melvoridle.com/assets/js/built/bankMenus.js:1521`
+- `<summoning-max-hit>` -> `SummoningMaxHitElement` - `melvoridle.com/assets/js/built/bankMenus.js:1553`
+- `<world-map-display>` -> `WorldMapDisplayElement` - `melvoridle.com/assets/js/built/cartography.js:2371`
+- `<hex-overview>` -> `HexOverviewElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:2621`
+- `<survey-overview>` -> `SurveyOverviewElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:2669`
+- `<world-map-filter>` -> `WorldMapFilterElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:2702`
+- `<image-search-result>` -> `ImageSearchResultElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:2722`
+- `<poi-search-result>` -> `PoiSearchResultElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:2756`
+- `<create-map-menu>` -> `CreateMapMenuElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:2790`
+- `<dig-site-select-menu>` -> `DigSiteSelectMenuElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:2886`
+- `<paper-making-menu>` -> `PaperMakingMenuElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:2973`
+- `<dig-site-map-info>` -> `DigSiteMapInfoElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:3029`
+- `<map-upgrade-menu>` -> `MapUpgradeMenuElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:3154`
+- `<map-refinement-menu>` -> `MapRefinementMenuElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:3279`
+- `<hex-tooltip>` -> `HexTooltipElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:3430`
+- `<map-mastery-menu>` -> `MapMasteryMenuElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:3468`
+- `<map-mastery-bonus>` -> `MapMasteryBonusElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:3524`
+- `<poi-discovery-costs>` -> `PoiDiscoveryCostsElement` - `melvoridle.com/assets/js/built/cartographyMenu.js:3562`
+- `<character-display>` -> `CharacterDisplayElement` - `melvoridle.com/assets/js/built/characterSelectMenus.js:189`
+- `<save-slot-display>` -> `SaveSlotDisplayElement` - `melvoridle.com/assets/js/built/characterSelectMenus.js:357`
+- `<gamemode-selection>` -> `GamemodeSelectionElement` - `melvoridle.com/assets/js/built/characterSelectMenus.js:430`
+- `<farming-seed-select>` -> `FarmingSeedSelectElement` - `melvoridle.com/assets/js/built/combat.js:108`
+- `<spend-mastery-menu>` -> `SpendMasteryMenuElement` - `melvoridle.com/assets/js/built/combat.js:109`
+- `<skill-milestone-display>` -> `SkillMilestoneDisplayElement` - `melvoridle.com/assets/js/built/combat.js:110`
+- `<skill-tree-menu>` -> `SkillTreeMenuElement` - `melvoridle.com/assets/js/built/combat.js:111`
+- `<potion-select-menu>` -> `PotionSelectMenuElement` - `melvoridle.com/assets/js/built/combat.js:112`
+- `<item-upgrade-menu>` -> `ItemUpgradeMenuElement` - `melvoridle.com/assets/js/built/combat.js:113`
+- `<equipment-grid>` -> `EquipmentGridElement` - `melvoridle.com/assets/js/built/combat.js:114`
+- `<offline-loading>` -> `OfflineLoadingElement` - `melvoridle.com/assets/js/built/combat.js:115`
+- `<mastery-pool-bonuses>` -> `MasteryPoolBonusesElement` - `melvoridle.com/assets/js/built/combat.js:116`
+- `<ancient-relics-menu>` -> `AncientRelicsMenuElement` - `melvoridle.com/assets/js/built/combat.js:117`
+- `<monster-stats>` -> `MonsterStatsElement` - `melvoridle.com/assets/js/built/combat.js:118`
+- `<combat-area-menu>` -> `CombatAreaMenuElement` - `melvoridle.com/assets/js/built/combatAreas.js:889`
+- `<monster-select-table>` -> `MonsterSelectTableElement` - `melvoridle.com/assets/js/built/combatAreas.js:968`
+- `<monster-select-table-row>` -> `MonsterSelectTableRowElement` - `melvoridle.com/assets/js/built/combatAreas.js:1022`
+- `<dungeon-select>` -> `DungeonSelectElement` - `melvoridle.com/assets/js/built/combatAreas.js:1044`
+- `<abyss-depth-select>` -> `AbyssDepthSelectElement` - `melvoridle.com/assets/js/built/combatAreas.js:1061`
+- `<stronghold-select>` -> `StrongholdSelectElement` - `melvoridle.com/assets/js/built/combatAreas.js:1181`
+- `<view-monster-list-table>` -> `ViewMonsterListTableElement` - `melvoridle.com/assets/js/built/combatAreas.js:1977`
+- `<view-monster-list-table-row>` -> `ViewMonsterListTableRowElement` - `melvoridle.com/assets/js/built/combatAreas.js:2045`
+- `<combat-loot-menu>` -> `CombatLootMenuElement` - `melvoridle.com/assets/js/built/combatLoot.js:221`
+- `<combat-passive-span>` -> `CombatPassiveSpanElement` - `melvoridle.com/assets/js/built/combatMenus.js:18`
+- `<enemy-passives>` -> `EnemyPassivesElement` - `melvoridle.com/assets/js/built/combatMenus.js:55`
+- `<special-attack-span>` -> `SpecialAttackSpanElement` - `melvoridle.com/assets/js/built/combatMenus.js:81`
+- `<enemy-special-attacks>` -> `EnemySpecialAttacksElement` - `melvoridle.com/assets/js/built/combatMenus.js:122`
+- `<evasion-table>` -> `EvasionTableElement` - `melvoridle.com/assets/js/built/combatMenus.js:167`
+- `<resistance-span>` -> `ResistanceSpanElement` - `melvoridle.com/assets/js/built/combatMenus.js:188`
+- `<resistance-table>` -> `ResistanceTableElement` - `melvoridle.com/assets/js/built/combatMenus.js:240`
+- `<defensive-stats>` -> `DefensiveStatsElement` - `melvoridle.com/assets/js/built/combatMenus.js:264`
+- `<offensive-stats>` -> `OffensiveStatsElement` - `melvoridle.com/assets/js/built/combatMenus.js:335`
+- `<combat-levels>` -> `CombatLevelsElement` - `melvoridle.com/assets/js/built/combatMenus.js:434`
+- `<triangle-damage-tooltip>` -> `TriangleDamageTooltipElement` - `melvoridle.com/assets/js/built/combatMenus.js:476`
+- `<player-stats>` -> `PlayerStatsElement` - `melvoridle.com/assets/js/built/combatMenus.js:647`
+- `<combat-triangle-set-table>` -> `CombatTriangleSetTableElement` - `melvoridle.com/assets/js/built/combatTriangle.js:180`
+- `<combat-triangle-set-table-row>` -> `CombaTriangleSetTableRowElement` - `melvoridle.com/assets/js/built/combatTriangle.js:220`
+- `<skill-completion>` -> `SkillCompletionElement` - `melvoridle.com/assets/js/built/completionLog.js:677`
+- `<mastery-completion>` -> `MasteryCompletionElement` - `melvoridle.com/assets/js/built/completionLog.js:718`
+- `<item-completion>` -> `ItemCompletionElement` - `melvoridle.com/assets/js/built/completionLog.js:774`
+- `<monster-completion>` -> `MonsterCompletionElement` - `melvoridle.com/assets/js/built/completionLog.js:830`
+- `<pet-completion>` -> `PetCompletionElement` - `melvoridle.com/assets/js/built/completionLog.js:890`
+- `<item-charge-display>` -> `ItemChargeDisplayElement` - `melvoridle.com/assets/js/built/components.js:72`
+- `<settings-checkbox>` -> `SettingsCheckboxElement` - `melvoridle.com/assets/js/built/components.js:115`
+- `<settings-switch>` -> `SettingsSwitchElement` - `melvoridle.com/assets/js/built/components.js:192`
+- `<settings-dropdown>` -> `SettingsDropdownElement` - `melvoridle.com/assets/js/built/components.js:226`
+- `<upgrade-chain-display>` -> `UpgradeChainDisplayElement` - `melvoridle.com/assets/js/built/components.js:280`
+- `<character-resistance>` -> `CharacterResistanceElement` - `melvoridle.com/assets/js/built/components.js:454`
+- `<cooking-menu>` -> `CookingMenuElement` - `melvoridle.com/assets/js/built/cookingMenu.js:209`
+- `<cooking-recipe-selection>` -> `CookingRecipeSelectionElement` - `melvoridle.com/assets/js/built/cookingMenu.js:303`
+- `<locked-cooking-recipe>` -> `LockedCookingRecipeElement` - `melvoridle.com/assets/js/built/cookingMenu.js:345`
+- `<corruption-menu>` -> `CorruptionMenuElement` - `melvoridle.com/assets/js/built/corruption.js:212`
+- `<corruption-element>` -> `CorruptionElementElement` - `melvoridle.com/assets/js/built/corruption.js:252`
+- `<equipment-grid-icon>` -> `EquipmentGridIconElement` - `melvoridle.com/assets/js/built/equipment.js:799`
+- `<equipment-tooltip>` -> `EquipmentTooltipElement` - `melvoridle.com/assets/js/built/equipment.js:962`
+- `<quick-equip-tooltip>` -> `QuickEquipTooltipElement` - `melvoridle.com/assets/js/built/equipment.js:1004`
+- `<food-select-option>` -> `FoodSelectOptionElement` - `melvoridle.com/assets/js/built/equippedFood.js:161`
+- `<food-select-menu>` -> `FoodSelectMenuElement` - `melvoridle.com/assets/js/built/equippedFood.js:247`
+- `<combat-event-menu>` -> `CombatEventMenuElement` - `melvoridle.com/assets/js/built/eventMenu.js:26`
+- `<farming-category-button>` -> `FarmingCategoryButtonElement` - `melvoridle.com/assets/js/built/farmingMenus.js:27`
+- `<farming-category-options>` -> `FarmingCategoryOptionsElement` - `melvoridle.com/assets/js/built/farmingMenus.js:92`
+- `<farming-plot>` -> `FarmingPlotElement` - `melvoridle.com/assets/js/built/farmingMenus.js:300`
+- `<locked-farming-plot>` -> `LockedFarmingPlotElement` - `melvoridle.com/assets/js/built/farmingMenus.js:369`
+- `<firemaking-log-menu>` -> `FiremakingLogMenuElement` - `melvoridle.com/assets/js/built/firemakingMenus.js:191`
+- `<firemaking-bonfire-menu>` -> `FiremakingBonfireMenuElement` - `melvoridle.com/assets/js/built/firemakingMenus.js:277`
+- `<firemaking-oil-menu>` -> `FiremakingOilMenuElement` - `melvoridle.com/assets/js/built/firemakingMenus.js:354`
+- `<fishing-area-menu>` -> `FishingAreaMenuElement` - `melvoridle.com/assets/js/built/fishingMenus.js:179`
+- `<fishing-area-menu-button>` -> `FishingAreaMenuButtonElement` - `melvoridle.com/assets/js/built/fishingMenus.js:268`
+- `<fishing-contest-menu>` -> `FishingContestMenuElement` - `melvoridle.com/assets/js/built/fishingMenus.js:369`
+- `<offline-progress>` -> `OfflineProgressElement` - `melvoridle.com/assets/js/built/game.js:3903`
+- `<skill-cap-increase-button>` -> `SkillCapIncreaseButtonElement` - `melvoridle.com/assets/js/built/gamemode.js:471`
+- `<skill-cap-increase-modal>` -> `SkillCapIncreaseModalElement` - `melvoridle.com/assets/js/built/gamemode.js:504`
+- `<level-cap-purchase-button>` -> `LevelCapPurchaseButtonElement` - `melvoridle.com/assets/js/built/gamemode.js:607`
+- `<level-cap-purchase-modal>` -> `LevelCapPurchaseModalElement` - `melvoridle.com/assets/js/built/gamemode.js:712`
+- `<harvesting-vein-product>` -> `HarvestingVeinProductElement` - `melvoridle.com/assets/js/built/harvestingMenu.js:30`
+- `<harvesting-vein>` -> `HarvestingVeinElement` - `melvoridle.com/assets/js/built/harvestingMenu.js:185`
+- `<quantity-icons>` -> `QuantityIconsElement` - `melvoridle.com/assets/js/built/iconBoxes.js:110`
+- `<current-quantity-icons>` -> `CurrentQuantityIconsElement` - `melvoridle.com/assets/js/built/iconBoxes.js:196`
+- `<requires-box>` -> `RequiresBoxElement` - `melvoridle.com/assets/js/built/iconBoxes.js:226`
+- `<haves-box>` -> `HavesBoxElement` - `melvoridle.com/assets/js/built/iconBoxes.js:259`
+- `<produces-box>` -> `ProducesBoxElement` - `melvoridle.com/assets/js/built/iconBoxes.js:286`
+- `<grants-box>` -> `GrantsBoxElement` - `melvoridle.com/assets/js/built/iconBoxes.js:339`
+- `<cooking-bonus-box>` -> `CookingBonusBoxElement` - `melvoridle.com/assets/js/built/iconBoxes.js:397`
+- `<xp-icon-tooltip>` -> `XpIconTooltipElement` - `melvoridle.com/assets/js/built/infoIcons.js:104`
+- `<xp-icon>` -> `XpIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:127`
+- `<abyssal-xp-icon>` -> `AbyssalXpIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:150`
+- `<skill-xp-icon>` -> `SkillXpIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:174`
+- `<interval-icon-tooltip>` -> `IntervalIconTooltipElement` - `melvoridle.com/assets/js/built/infoIcons.js:190`
+- `<interval-icon>` -> `IntervalIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:219`
+- `<doubling-icon-tooltip>` -> `DoublingIconTooltipElement` - `melvoridle.com/assets/js/built/infoIcons.js:239`
+- `<doubling-icon>` -> `DoublingIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:257`
+- `<preservation-icon-tooltip>` -> `PreservationIconTooltipElement` - `melvoridle.com/assets/js/built/infoIcons.js:277`
+- `<preservation-icon>` -> `PreservationIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:295`
+- `<perfect-cook-icon-tooltip>` -> `PerfectCookIconTooltipElement` - `melvoridle.com/assets/js/built/infoIcons.js:315`
+- `<perfect-cook-icon>` -> `PerfectCookIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:333`
+- `<cooking-success-icon-tooltip>` -> `CookingSuccessIconTooltipElement` - `melvoridle.com/assets/js/built/infoIcons.js:353`
+- `<cooking-success-icon>` -> `CookingSuccessIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:371`
+- `<additional-primary-quantity-icon-tooltip>` -> `AdditionalPrimaryQuantityIconTooltipElement` - `melvoridle.com/assets/js/built/infoIcons.js:387`
+- `<additional-primary-quantity-icon>` -> `AdditionalPrimaryQuantityIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:404`
+- `<cost-reduction-icon-tooltip>` -> `CostReductionIconTooltipElement` - `melvoridle.com/assets/js/built/infoIcons.js:424`
+- `<cost-reduction-icon>` -> `CostReductionIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:442`
+- `<mastery-xp-icon>` -> `MasteryXpIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:464`
+- `<mastery-pool-icon-tooltip>` -> `MasteryPoolIconTooltipElement` - `melvoridle.com/assets/js/built/infoIcons.js:481`
+- `<mastery-pool-icon>` -> `MasteryPoolIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:513`
+- `<stealth-icon-tooltip>` -> `StealthIconTooltipElement` - `melvoridle.com/assets/js/built/infoIcons.js:559`
+- `<stealth-icon>` -> `StealthIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:579`
+- `<item-chance-icon>` -> `ItemChanceIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:599`
+- `<meteorite-chance-icon-tooltip>` -> `MeteoriteChanceIconTooltipElement` - `melvoridle.com/assets/js/built/infoIcons.js:610`
+- `<meteorite-chance-icon>` -> `MeteoriteChanceIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:626`
+- `<starfall-chance-icon>` -> `StarfallChanceIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:642`
+- `<item-quantity-icon>` -> `ItemQuantityIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:674`
+- `<cooking-stockpile-icon>` -> `CookingStockpileIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:704`
+- `<currency-quantity-icon>` -> `CurrencyQuantityIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:727`
+- `<item-current-icon>` -> `ItemCurrentIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:781`
+- `<currency-current-icon>` -> `CurrencyCurrentIconElement` - `melvoridle.com/assets/js/built/infoIcons.js:820`
+- `<key-binding-edit>` -> `KeyBindingEditElement` - `melvoridle.com/assets/js/built/keyboardInput.js:564`
+- `<lang-string>` -> `LangStringElement` - `melvoridle.com/assets/js/built/language.js:163`
+- `<lore-book-button>` -> `LoreBookButtonElement` - `melvoridle.com/assets/js/built/lore.js:629`
+- `<rune-menu>` -> `RuneMenuElement` - `melvoridle.com/assets/js/built/magic.js:89`
+- `<locked-spell-tooltip>` -> `LockedSpellTooltipElement` - `melvoridle.com/assets/js/built/magic.js:259`
+- `<spell-tooltip-runes>` -> `SpellTooltipRunesElement` - `melvoridle.com/assets/js/built/magic.js:297`
+- `<attack-spell-tooltip>` -> `AttackSpellTooltipElement` - `melvoridle.com/assets/js/built/magic.js:336`
+- `<curse-spell-tooltip>` -> `CurseSpellTooltipElement` - `melvoridle.com/assets/js/built/magic.js:361`
+- `<aurora-spell-tooltip>` -> `AuroraSpellTooltipElement` - `melvoridle.com/assets/js/built/magic.js:381`
+- `<spell-button>` -> `SpellButtonElement` - `melvoridle.com/assets/js/built/magic.js:450`
+- `<attack-spell-menu>` -> `AttackSpellMenuElement` - `melvoridle.com/assets/js/built/magic.js:564`
+- `<curse-spell-menu>` -> `CurseSpellMenuElement` - `melvoridle.com/assets/js/built/magic.js:585`
+- `<aurora-spell-menu>` -> `AuroraSpellMenuElement` - `melvoridle.com/assets/js/built/magic.js:606`
+- `<spellbook-menu>` -> `SpellbookMenuElement` - `melvoridle.com/assets/js/built/magic.js:718`
+- `<mastery-display>` -> `MasteryDisplayElement` - `melvoridle.com/assets/js/built/masteryDisplays.js:56`
+- `<compact-mastery-display>` -> `CompactMasteryDisplayElement` - `melvoridle.com/assets/js/built/masteryDisplays.js:93`
+- `<mastery-pool-display>` -> `MasteryPoolDisplayElement` - `melvoridle.com/assets/js/built/masteryDisplays.js:205`
+- `<spend-mastery-menu-item>` -> `SpendMasteryMenuItemElement` - `melvoridle.com/assets/js/built/masteryDisplays.js:280`
+- `<mastery-skill-options>` -> `MasterySkillOptionsElement` - `melvoridle.com/assets/js/built/masteryDisplays.js:548`
+- `<mastery-pool-bonus>` -> `MasteryPoolBonusElement` - `melvoridle.com/assets/js/built/masteryDisplays.js:580`
+- `<game-notification>` -> `GameNotificationElement` - `melvoridle.com/assets/js/built/notifications.js:685`
+- `<potion-select-menu-item>` -> `PotionSelectMenuItemElement` - `melvoridle.com/assets/js/built/potionManager.js:242`
+- `<locked-prayer-tooltip>` -> `LockedPrayerTooltipElement` - `melvoridle.com/assets/js/built/prayer.js:76`
+- `<prayer-tooltip>` -> `PrayerTooltipElement` - `melvoridle.com/assets/js/built/prayer.js:135`
+- `<prayer-button>` -> `PrayerButtonElement` - `melvoridle.com/assets/js/built/prayer.js:188`
+- `<prayer-book-menu>` -> `PrayerBookMenuElement` - `melvoridle.com/assets/js/built/prayer.js:309`
+- `<progress-bar>` -> `ProgressBarElement` - `melvoridle.com/assets/js/built/progressbar.js:67`
+- `<realm-select-option>` -> `RealmSelectOptionElement` - `melvoridle.com/assets/js/built/realms.js:276`
+- `<realm-select-menu>` -> `RealmSelectMenuElement` - `melvoridle.com/assets/js/built/realms.js:322`
+- `<realm-tab-select>` -> `RealmTabSelectElement` - `melvoridle.com/assets/js/built/realms.js:385`
+- `<recipe-selection-tab>` -> `RecipeSelectionTabElement` - `melvoridle.com/assets/js/built/recipeSelection.js:45`
+- `<recipe-option>` -> `RecipeOptionElement` - `melvoridle.com/assets/js/built/recipeSelection.js:176`
+- `<item-recipe-option>` -> `ItemRecipeOptionElement` - `melvoridle.com/assets/js/built/recipeSelection.js:185`
+- `<smithing-recipe-option>` -> `SmithingRecipeOptionElement` - `melvoridle.com/assets/js/built/recipeSelection.js:195`
+- `<fletching-recipe-option>` -> `FletchingRecipeOptionElement` - `melvoridle.com/assets/js/built/recipeSelection.js:206`
+- `<crafting-recipe-option>` -> `CraftingRecipeOptionElement` - `melvoridle.com/assets/js/built/recipeSelection.js:216`
+- `<runecrafting-recipe-option>` -> `RunecraftingRecipeOptionElement` - `melvoridle.com/assets/js/built/recipeSelection.js:226`
+- `<herblore-recipe-option>` -> `HerbloreRecipeOptionElement` - `melvoridle.com/assets/js/built/recipeSelection.js:248`
+- `<alt-magic-spell-option>` -> `AltMagicSpellOptionElement` - `melvoridle.com/assets/js/built/recipeSelection.js:288`
+- `<summoning-recipe-option>` -> `SummoningRecipeOptionElement` - `melvoridle.com/assets/js/built/recipeSelection.js:324`
+- `<summoning-selection-tab>` -> `SummoningSelectionTabElement` - `melvoridle.com/assets/js/built/recipeSelection.js:347`
+- `<category-menu-option>` -> `CategoryMenuOptionElement` - `melvoridle.com/assets/js/built/recipeSelection.js:379`
+- `<category-menu>` -> `CategoryMenuElement` - `melvoridle.com/assets/js/built/recipeSelection.js:450`
+- `<realmed-category-menu>` -> `RealmedCategoryMenuElement` - `melvoridle.com/assets/js/built/recipeSelection.js:541`
+- `<mining-rock>` -> `MiningRockElement` - `melvoridle.com/assets/js/built/rockMenu.js:155`
+- `<skill-sidebar-aside>` -> `SkillSidebarAsideElement` - `melvoridle.com/assets/js/built/skillNav.js:170`
+- `<skill-header>` -> `SkillHeaderElement` - `melvoridle.com/assets/js/built/skillNav.js:470`
+- `<combat-skill-progress-table>` -> `CombatSkillProgressTableElement` - `melvoridle.com/assets/js/built/skillNav.js:644`
+- `<skill-tree-button>` -> `SkillTreeButtonElement` - `melvoridle.com/assets/js/built/skillTreeMenus.js:16`
+- `<skill-tree-node-info>` -> `SkillTreeNodeInfoElement` - `melvoridle.com/assets/js/built/skillTreeMenus.js:147`
+- `<skill-tree-node-icon>` -> `SkillTreeNodeIconElement` - `melvoridle.com/assets/js/built/skillTreeMenus.js:234`
+- `<slayer-task-menu>` -> `SlayerTaskMenuElement` - `melvoridle.com/assets/js/built/slayer.js:720`
+- `<stat-table>` -> `StatTableElement` - `melvoridle.com/assets/js/built/statsTable.js:80`
+- `<summoning-mark-discovery>` -> `SummoningMarkDiscoveryElement` - `melvoridle.com/assets/js/built/summoningMenus.js:154`
+- `<summoning-synergy-search>` -> `SummoningSynergySearchElement` - `melvoridle.com/assets/js/built/summoningMenus.js:261`
+- `<synergy-search-menu>` -> `SynergySearchMenuElement` - `melvoridle.com/assets/js/built/summoningMenus.js:411`
+- `<summoning-mark-menu>` -> `SummoningMarkMenuElement` - `melvoridle.com/assets/js/built/summoningMenus.js:462`
+- `<thieving-npc-nav>` -> `ThievingNPCNavElement` - `melvoridle.com/assets/js/built/thievingMenu.js:83`
+- `<thieving-info-box>` -> `ThievingInfoBoxElement` - `melvoridle.com/assets/js/built/thievingMenu.js:120`
+- `<thieving-area-panel>` -> `ThievingAreaPanelElement` - `melvoridle.com/assets/js/built/thievingMenu.js:222`
+- `<township-resource-display>` -> `TownshipResourceDisplayElement` - `melvoridle.com/assets/js/built/townshipMenus.js:121`
+- `<township-town-biome-select>` -> `TownshipTownBiomeSelectElement` - `melvoridle.com/assets/js/built/townshipMenus.js:227`
+- `<township-building-summary>` -> `TownshipBuildingSummaryElement` - `melvoridle.com/assets/js/built/townshipMenus.js:390`
+- `<building-requirements>` -> `BuildingRequirementsElement` - `melvoridle.com/assets/js/built/townshipMenus.js:464`
+- `<building-in-town>` -> `BuildingInTownElement` - `melvoridle.com/assets/js/built/townshipMenus.js:798`
+- `<township-yeet>` -> `TownshipYeetElement` - `melvoridle.com/assets/js/built/townshipMenus.js:817`
+- `<township-cap-resource>` -> `TownshipCapResourceElement` - `melvoridle.com/assets/js/built/townshipMenus.js:847`
+- `<township-conversion>` -> `TownshipConversionElement` - `melvoridle.com/assets/js/built/townshipMenus.js:1029`
+- `<township-conversion-swal>` -> `TownshipConversionSwalElement` - `melvoridle.com/assets/js/built/townshipMenus.js:1162`
+- `<township-worship-select-button>` -> `TownshipWorshipSelectButtonElement` - `melvoridle.com/assets/js/built/townshipMenus.js:1209`
+- `<township-worship-select>` -> `TownshipWorshipSelectElement` - `melvoridle.com/assets/js/built/townshipMenus.js:1264`
+- `<township-conversion-jump-to>` -> `TownshipConversionJumpToElement` - `melvoridle.com/assets/js/built/townshipMenus.js:1280`
+- `<township-task-category>` -> `TownshipTaskCategoryElement` - `melvoridle.com/assets/js/built/townshipMenus.js:1324`
+- `<township-casual-task-category>` -> `TownshipCasualTaskCategoryElement` - `melvoridle.com/assets/js/built/townshipMenus.js:1353`
+- `<township-task-goal>` -> `TownshipTaskGoalElement` - `melvoridle.com/assets/js/built/townshipMenus.js:1378`
+- `<township-task-reward>` -> `TownshipTaskRewardElement` - `melvoridle.com/assets/js/built/townshipMenus.js:1421`
+- `<township-task>` -> `TownshipTaskElement` - `melvoridle.com/assets/js/built/townshipMenus.js:1518`
+- `<township-casual-task>` -> `TownshipCasualTaskElement` - `melvoridle.com/assets/js/built/townshipMenus.js:1607`
+- `<township-tasks-menu>` -> `TownshipTasksMenuElement` - `melvoridle.com/assets/js/built/townshipMenus.js:1812`
+- `<tutorial-stage-display>` -> `TutorialStageDisplayElement` - `melvoridle.com/assets/js/built/tutorialMenus.js:126`
+- `<tutorial-progress-display>` -> `TutorialProgressDisplayElement` - `melvoridle.com/assets/js/built/tutorialMenus.js:148`
+- `<${tagName}>` -> `$` - `melvoridle.com/assets/js/built/utils.js:1701`
+- `<woodcutting-tree>` -> `WoodcuttingTreeElement` - `melvoridle.com/assets/js/built/woodcuttingMenu.js:109`
+
+## Mod Loader And Context API
+
+Entry points and helpers exposed to mods, including context lookup, resource loading, settings, storage, and APIs.
+
+- `melvoridle.com/assets/js/built/agilityMenus.js:501` - if (!game.settings.enableProgressBars) return;
+- `melvoridle.com/assets/js/built/agilityMenus.js:524` - if (!game.settings.enableProgressBars) return;
+- `melvoridle.com/assets/js/built/altMagic.js:596` - const actionEvent = new AltMagicActionEvent(this, spell, this.game.settings.useCombinationRunes);
+- `melvoridle.com/assets/js/built/archaeology.js:1260` - const donateQuantity = this.game.settings.genericArtefactAllButOne ? bankQuantity - 1 : bankQuantity;
+- `melvoridle.com/assets/js/built/bank2.js:303` - if (this.game.settings.bankSortOrder === 5 /* BankSortOrderSetting.Custom */ && this.customSortOrder.length === 0)
+- `melvoridle.com/assets/js/built/bank2.js:392` - existingIcon.updateQuantity(bankItem, this.game.settings.enableAccessibility);
+- `melvoridle.com/assets/js/built/bank2.js:661` - this.game.settings.bankSortOrder === 5 /* BankSortOrderSetting.Custom */ &&
+- `melvoridle.com/assets/js/built/bank2.js:821` - this.game.settings.defaultToCurrentEquipSet &&
+- `melvoridle.com/assets/js/built/bank2.js:824` - this.game.settings.enableDoubleClickEquip
+- `melvoridle.com/assets/js/built/bank2.js:827` - } else if (item instanceof OpenableItem && !bankItem.locked && this.game.settings.enableDoubleClickOpen) {
+- `melvoridle.com/assets/js/built/bank2.js:829` - } else if (item instanceof BoneItem && !bankItem.locked && this.game.settings.enableDoubleClickBury) {
+- `melvoridle.com/assets/js/built/bank2.js:842` - bankTabMenu.updateItemLockBorder(bankItem, this.game.settings.useDefaultBankBorders);
+- `melvoridle.com/assets/js/built/bank2.js:881` - if (this.game.settings.defaultToCurrentEquipSet)
+- `melvoridle.com/assets/js/built/bank2.js:1085` `switch()` - switch (this.game.settings.bankSortOrder) {
+- `melvoridle.com/assets/js/built/bank2.js:1105` - throw new Error(`Error sorting bank, sort order setting: ${this.game.settings.bankSortOrder} is invalid.`);
+- `melvoridle.com/assets/js/built/bank2.js:1117` - if (this.game.settings.bankSortOrder !== 5 /* BankSortOrderSetting.Custom */) return;
+- `melvoridle.com/assets/js/built/bank2.js:1159` `if()` - if (this.game.settings.showSaleConfirmations) {
+- `melvoridle.com/assets/js/built/bank2.js:1544` - bankTabMenu.updateForSearchResult(foundItems, foundTabs, this.game.settings.enableScrollableBankTabs);
+- `melvoridle.com/assets/js/built/bank2.js:1576` - if (!this.game.settings.bankFilterShowDemo && item.namespace === 'melvorD' /* Namespaces.Demo */)
+- `melvoridle.com/assets/js/built/bank2.js:1578` - if (!this.game.settings.bankFilterShowFull && item.namespace === 'melvorF' /* Namespaces.Full */)
+- `melvoridle.com/assets/js/built/bank2.js:1580` - if (!this.game.settings.bankFilterShowTotH && item.namespace === 'melvorTotH' /* Namespaces.Throne */)
+- `melvoridle.com/assets/js/built/bank2.js:1582` - if (!this.game.settings.bankFilterShowAoD && item.namespace === 'melvorAoD' /* Namespaces.AtlasOfDiscovery */)
+- `melvoridle.com/assets/js/built/bank2.js:1584` - if (!this.game.settings.bankFilterShowItA && item.namespace === 'melvorItA' /* Namespaces.IntoTheAbyss */)
+- `melvoridle.com/assets/js/built/bank2.js:1588` - !this.game.settings.bankFilterShowDamageReduction &&
+- `melvoridle.com/assets/js/built/bank2.js:1595` - !this.game.settings.bankFilterShowAbyssalResistance &&
+- `melvoridle.com/assets/js/built/bank2.js:1601` - if (!this.game.settings.bankFilterShowSkillXP && item.modifiesSkillXP) shouldShow = false;
+- `melvoridle.com/assets/js/built/bank2.js:1602` - if (!this.game.settings.bankFilterShowAbyssalXP && item.modifiesAbyssalXP) shouldShow = false;
+- `melvoridle.com/assets/js/built/bank2.js:1606` - !this.game.settings.bankFilterShowNormalDamage &&
+- `melvoridle.com/assets/js/built/bank2.js:1611` - !this.game.settings.bankFilterShowAbyssalDamage &&
+- `melvoridle.com/assets/js/built/bank2.js:1620` `if()` - if (this.game.settings.bankFilterShowAll && this.currentSearchQuery === '') {
+- `melvoridle.com/assets/js/built/bank2.js:1647` - this.game.settings.changeChoiceSetting('bankSortOrder', 5 /* BankSortOrderSetting.Custom */);
+- `melvoridle.com/assets/js/built/bank2.js:1655` - bankTabMenu.updateItemLockBorder(bankItem, this.game.settings.useDefaultBankBorders);
+- `melvoridle.com/assets/js/built/bankMenus.js:52` - this.updateQuantity(bankItem, game.settings.enableAccessibility);
+- `melvoridle.com/assets/js/built/bankMenus.js:56` - this.setBorder(game.settings.useDefaultBankBorders, bankItem.locked);
+- `melvoridle.com/assets/js/built/bankMenus.js:232` - game.settings.enableStickyBankTabs ? this.enableStickyBankTabs() : this.disableStickyBankTabs();
+- `melvoridle.com/assets/js/built/bankMenus.js:472` - if (game.settings.bankFilterShowAll \|\| game.bank.shouldShowBasedOnFilter(item)) showElement(icon);
+- `melvoridle.com/assets/js/built/bankMenus.js:1413` - /** Component for displaying bank item settings */
+- `melvoridle.com/assets/js/built/bankMenus.js:1419` - this._content.append(getTemplateNode('bank-item-settings-menu-template'));
+- `melvoridle.com/assets/js/built/bankMenus.js:1427` - this.minibarSettingsContainer = getElementFromFragment(this._content, 'minibar-settings-container', 'div');
+- `melvoridle.com/assets/js/built/bankMenus.js:1428` - this.minibarSettingsToggles = getElementFromFragment(this._content, 'minibar-settings-toggles', 'div');
+- `melvoridle.com/assets/js/built/bankMenus.js:1463` `bank-item-settings-menu -> BankItemSettingsMenuElement` - window.customElements.define('bank-item-settings-menu', BankItemSettingsMenuElement);
+- `melvoridle.com/assets/js/built/bankMenus.js:1473` - this.settingsMenu = getElementFromFragment(this._content, 'settings-menu', 'bank-item-settings-menu');
+- `melvoridle.com/assets/js/built/cartography.js:1601` - const continueSkill = allGiven \|\| this.game.settings.continueIfBankFull;
+- `melvoridle.com/assets/js/built/cartographyMenu.js:36` - PIXI.settings.RESOLUTION = window.devicePixelRatio;
+- `melvoridle.com/assets/js/built/cartographyMenu.js:141` - antialias: game.settings.enableMapAntialiasing,
+- `melvoridle.com/assets/js/built/cartographyMenu.js:471` - let quality = game.settings.mapTextureQuality;
+- `melvoridle.com/assets/js/built/cartographyMenu.js:475` - if (map.isModded) tileData = { modContext: mod.getContext(map.namespace) };
+- `melvoridle.com/assets/js/built/cartographyMenu.js:487` - if (group.isModded) groupData = { modContext: mod.getContext(group.namespace) };
+- `melvoridle.com/assets/js/built/cartographyMenu.js:995` - const marker = game.settings.useCat
+- `melvoridle.com/assets/js/built/cartographyMenu.js:2195` - PIXI.utils.path.toPosix(PIXI.settings.ADAPTER.getBaseUrl()).split('?')[0].split('#')[0],
+- `melvoridle.com/assets/js/built/characterSelectMenus.js:196` - this.settingsButton = getElementFromFragment(this._content, 'settings-button', 'button');
+- `melvoridle.com/assets/js/built/characterSelectMenus.js:199` - this.settingsDivider = getElementFromFragment(this._content, 'settings-divider', 'div');
+- `melvoridle.com/assets/js/built/characterSelectMenus.js:203` - this.deleteSettingsDivider = getElementFromFragment(this._content, 'delete-settings-divider', 'div');
+- `melvoridle.com/assets/js/built/cloud.js:35` - PlayFab.settings.titleId = 'E3855';
+- `melvoridle.com/assets/js/built/cloud.js:84` - $('#settings-cloud-options').html('');
+- `melvoridle.com/assets/js/built/cloud.js:85` - $('#settings-push-notifications').removeClass('d-none');
+- `melvoridle.com/assets/js/built/cloud.js:90` - <settings-switch class="mb-4" data-setting-id="autoCloudSave" data-size="large"></settings-switch>
+- `melvoridle.com/assets/js/built/cloud.js:93` - $('#settings-cloud-options').html(s);
+- `melvoridle.com/assets/js/built/cloud.js:96` - if (game.settings.autoCloudSave && confirmedLoaded) cloudManager.forceUpdatePlayFabSave();
+- `melvoridle.com/assets/js/built/cloud.js:109` - $('#settings-cloud-options').html('');
+- `melvoridle.com/assets/js/built/cloud.js:111` - $('#settings-push-notifications').addClass('d-none');
+- `melvoridle.com/assets/js/built/cloud.js:117` - if (isLoaded) game.settings.initializeToggles();
+- `melvoridle.com/assets/js/built/cloudManager.js:1067` - game.settings.autoCloudSave
+- `melvoridle.com/assets/js/built/cloudManager.js:1110` - TitleId: PlayFab.settings.titleId,
+- `melvoridle.com/assets/js/built/cloudManager.js:1140` - TitleId: PlayFab.settings.titleId,
+- `melvoridle.com/assets/js/built/cloudManager.js:1170` - TitleId: PlayFab.settings.titleId,
+- `melvoridle.com/assets/js/built/cloudManager.js:1246` - TitleId: PlayFab.settings.titleId,
+- `melvoridle.com/assets/js/built/combat.js:329` - corruptionSettings: document.getElementById('combat-corruption-settings'),
+- `melvoridle.com/assets/js/built/combatAreas.js:233` - game.settings.showCombatAreaWarnings && area.hasBarrierMonsters
+- `melvoridle.com/assets/js/built/combatAreas.js:243` - game.settings.showExpansionBackgroundColours &&
+- `melvoridle.com/assets/js/built/combatAreas.js:248` - if (game.settings.showExpansionBackgroundColours && area.namespace === 'melvorTotH' /* Namespaces.Throne */)
+- `melvoridle.com/assets/js/built/combatAreas.js:251` - if (game.settings.showExpansionBackgroundColours && area.namespace === 'melvorItA' /* Namespaces.IntoTheAbyss */)
+- `melvoridle.com/assets/js/built/combatAreas.js:708` - game.settings.showWikiLinks ? showElement(this.wikiLink) : hideElement(this.wikiLink);
+- `melvoridle.com/assets/js/built/combatAreas.js:1217` - if (game.settings.useLegacyRealmSelection \|\| category.areas.some((area) => area.realm === realm)) {
+- `melvoridle.com/assets/js/built/combatManager.js:441` `if()` - if (!this.game.settings.useLegacyRealmSelection && this.game.unlockedRealms.length > 1) {
+- `melvoridle.com/assets/js/built/combatManager.js:706` - if (!cloudManager.isBirthdayEvent2023Active() \|\| !game.settings.toggleBirthdayEvent) return;
+- `melvoridle.com/assets/js/built/combatManager.js:933` - this.game.settings.autoRestartDungeon && dungeon.id !== 'melvorF:Into_the_Mist'
+- `melvoridle.com/assets/js/built/combatManager.js:1003` `if()` - if (!this.game.settings.autoRestartDungeon \|\| this.preventAutoRestart) {
+- `melvoridle.com/assets/js/built/combatManager.js:1058` `if()` - if (!this.game.settings.autoRestartDungeon) {
+- `melvoridle.com/assets/js/built/combatManager.js:1544` - !this.game.settings.enablePermaCorruption \|\|
+
+## Patching
+
+Symbols related to the mod patcher: additive hooks, replacements, and patch detection.
+
+- `melvoridle.com/assets/js/built/agility.js:1002` - agilityObstacleMenus[agilityObstacleMenus.length - 1].after(menu);
+- `melvoridle.com/assets/js/built/agility.js:1149` - : _a.classList.replace('d-flex', 'd-none');
+- `melvoridle.com/assets/js/built/agility.js:1152` - : _b.classList.replace('d-none', 'd-flex');
+- `melvoridle.com/assets/js/built/agility.js:1262` - : _a.classList.replace('d-none', 'd-flex');
+- `melvoridle.com/assets/js/built/agility.js:1265` - : _b.classList.replace('d-flex', 'd-none');
+- `melvoridle.com/assets/js/built/agilityMenus.js:60` - this.blockContainer.classList.replace('border-agility', 'border-danger');
+- `melvoridle.com/assets/js/built/agilityMenus.js:83` - this.blockContainer.classList.replace('border-danger', 'border-agility');
+- `melvoridle.com/assets/js/built/agilityMenus.js:171` - this.blockContainer.classList.replace('border-warning', 'border-agility');
+- `melvoridle.com/assets/js/built/agilityMenus.js:182` - this.blockContainer.classList.replace('border-agility', 'border-warning');
+- `melvoridle.com/assets/js/built/agilityMenus.js:282` - this.link.classList.replace('border-agility', 'border-success');
+- `melvoridle.com/assets/js/built/agilityMenus.js:285` - this.link.classList.replace('border-success', 'border-agility');
+- `melvoridle.com/assets/js/built/ancientRelics.js:101` - this.relicContainer.classList.replace('bg-trader-locked', 'bg-combat-inner-dark');
+- `melvoridle.com/assets/js/built/ancientRelics.js:104` - this.relicContainer.classList.replace('bg-combat-inner-dark', 'bg-trader-locked');
+- `melvoridle.com/assets/js/built/archaeologyMenu.js:265` - chanceElement.classList.replace('text-danger', 'text-success');
+- `melvoridle.com/assets/js/built/archaeologyMenu.js:266` - chanceElement.classList.replace('font-w700', 'font-w400');
+- `melvoridle.com/assets/js/built/archaeologyMenu.js:267` - chanceElement.classList.replace('font-size-xs', 'font-size-sm');
+- `melvoridle.com/assets/js/built/archaeologyMenu.js:270` - chanceElement.classList.replace('text-success', 'text-danger');
+- `melvoridle.com/assets/js/built/archaeologyMenu.js:271` - chanceElement.classList.replace('font-w400', 'font-w700');
+- `melvoridle.com/assets/js/built/archaeologyMenu.js:272` - chanceElement.classList.replace('font-size-xs', 'font-size-sm');
+- `melvoridle.com/assets/js/built/archaeologyMenu.js:275` - chanceElement.classList.replace('text-success', 'text-danger');
+- `melvoridle.com/assets/js/built/archaeologyMenu.js:276` - chanceElement.classList.replace('font-w400', 'font-w700');
+- `melvoridle.com/assets/js/built/archaeologyMenu.js:277` - chanceElement.classList.replace('font-size-sm', 'font-size-xs');
+- `melvoridle.com/assets/js/built/archaeologyMenu.js:422` - this.classList.replace('btn-light', 'btn-alt-green');
+- `melvoridle.com/assets/js/built/assets.js:64` - return baseURI.replace(/\?\d+$/, '');
+- `melvoridle.com/assets/js/built/assets.js:105` - return langString.replace(ASSET_PATH_REGEXP, (_, baseURI) => {
+- `melvoridle.com/assets/js/built/assets.js:145` - cssFile = cssFile.replace(CSS_PATH_REGEXP, (_, baseURI) => {
+- `melvoridle.com/assets/js/built/astrologyMenus.js:159` - this.level.classList.replace('badge-danger', 'badge-success');
+- `melvoridle.com/assets/js/built/astrologyMenus.js:161` - this.level.classList.replace('badge-success', 'badge-danger');
+- `melvoridle.com/assets/js/built/astrologyMenus.js:168` - this.abyssalLevel.classList.replace('badge-danger', 'badge-success');
+- `melvoridle.com/assets/js/built/astrologyMenus.js:170` - this.abyssalLevel.classList.replace('badge-success', 'badge-danger');
+- `melvoridle.com/assets/js/built/astrologyMenus.js:206` - this.modifierContainer.classList.replace('border-warning', 'border-info');
+- `melvoridle.com/assets/js/built/astrologyMenus.js:212` - this.modifierContainer.classList.replace('border-info', 'border-warning');
+- `melvoridle.com/assets/js/built/astrologyMenus.js:218` - this.modifierContainer.classList.replace('border-info', 'border-danger');
+- `melvoridle.com/assets/js/built/astrologyMenus.js:448` - this.doublingChance.before(chanceIcon);
+- `melvoridle.com/assets/js/built/attacks.js:391` - description = description.replace(DESCRIPTION_MODIFICATION_REGEXP, (match) => {
+- `melvoridle.com/assets/js/built/attacks.js:394` - description = description.replace(
+- `melvoridle.com/assets/js/built/attacks.js:399` - description = description.replace(
+- `melvoridle.com/assets/js/built/attacks.js:409` - description = description.replace(
+- `melvoridle.com/assets/js/built/attacks.js:415` - description = description.replace(
+- `melvoridle.com/assets/js/built/attacks.js:421` - description = description.replace(
+- `melvoridle.com/assets/js/built/attacks.js:431` - description = description.replace(
+- `melvoridle.com/assets/js/built/attacks.js:1149` - description = description.replace(new RegExp(`<${replaceName}>`, 'gi'), (match) => {
+- `melvoridle.com/assets/js/built/bankMenus.js:866` - this.sellAllButOneButton.classList.replace('btn-info', 'btn-success');
+- `melvoridle.com/assets/js/built/bankMenus.js:867` - this.sellAllButton.classList.replace('btn-success', 'btn-info');
+- `melvoridle.com/assets/js/built/bankMenus.js:871` - this.sellAllButton.classList.replace('btn-info', 'btn-success');
+- `melvoridle.com/assets/js/built/bankMenus.js:872` - this.sellAllButOneButton.classList.replace('btn-success', 'btn-info');
+- `melvoridle.com/assets/js/built/bankMenus.js:939` - this.sellAllButOneButton.classList.replace('btn-success', 'btn-info');
+- `melvoridle.com/assets/js/built/bankMenus.js:940` - this.sellAllButton.classList.replace('btn-success', 'btn-info');
+- `melvoridle.com/assets/js/built/bankMenus.js:1172` - button.classList.replace('btn-outline-primary', 'btn-success');
+- `melvoridle.com/assets/js/built/bankMenus.js:1174` - button.classList.replace('btn-success', 'btn-outline-primary');
+- `melvoridle.com/assets/js/built/cartographyMenu.js:437` - this.surveyOverview.classList.replace('mb-0', 'mb-2');
+- `melvoridle.com/assets/js/built/cartographyMenu.js:441` - this.surveyOverview.classList.replace('mb-2', 'mb-0');
+- `melvoridle.com/assets/js/built/cartographyMenu.js:3019` - this.mapUpgradeProgress.classList.replace('text-success', 'text-warning');
+- `melvoridle.com/assets/js/built/cartographyMenu.js:3021` - this.mapUpgradeProgress.classList.replace('text-warning', 'text-success');
+- `melvoridle.com/assets/js/built/cartographyMenu.js:3102` - this.createMapButton.before(img);
+- `melvoridle.com/assets/js/built/character.js:1726` - this.selfModifierQuery.replace({ effectGroup: [] });
+- `melvoridle.com/assets/js/built/characterSelectMenus.js:97` - this.characterName.classList.replace('font-size-lg', 'font-size-md');
+- `melvoridle.com/assets/js/built/characterSelectMenus.js:99` - this.characterName.classList.replace('font-size-md', 'font-size-lg');
+- `melvoridle.com/assets/js/built/characterSelectMenus.js:179` - this.timestampComparison.classList.replace('bg-danger', 'bg-success');
+- `melvoridle.com/assets/js/built/characterSelectMenus.js:182` - this.timestampComparison.classList.replace('bg-success', 'bg-danger');
+- `melvoridle.com/assets/js/built/characterSelectMenus.js:281` - this.existingCloudWarning.classList.replace('text-info', 'text-danger');
+- `melvoridle.com/assets/js/built/characterSelectMenus.js:300` - this.existingCloudWarning.classList.replace('text-danger', 'text-info');
+- `melvoridle.com/assets/js/built/characterSelectMenus.js:403` - this.safety.classList.replace('bg-combat-menu-selected', 'bg-danger');
+- `melvoridle.com/assets/js/built/characterSelectMenus.js:406` - this.safety.classList.replace('bg-danger', 'bg-combat-menu-selected');
+- `melvoridle.com/assets/js/built/cloudManager.js:3749` - const iosDate = new Date(accountCreated.replace(/\s/, 'T'));
+- `melvoridle.com/assets/js/built/combat.js:408` - lockedConstellation.before(constellationMenu);
+- `melvoridle.com/assets/js/built/combatAreas.js:656` - this.areaEffectContainer.classList.replace('text-danger', 'text-success');
+- `melvoridle.com/assets/js/built/combatAreas.js:659` - this.areaEffectContainer.classList.replace('text-success', 'text-danger');
+- `melvoridle.com/assets/js/built/combatMenus.js:688` - this.specialAttacks.classList.replace('d-block', 'd-none');
+- `melvoridle.com/assets/js/built/combatMenus.js:691` - this.specialAttacks.classList.replace('d-none', 'd-block');
+- `melvoridle.com/assets/js/built/combatMenus.js:698` - this.combatPassives.classList.replace('d-none', 'd-block');
+- `melvoridle.com/assets/js/built/combatMenus.js:700` - this.combatPassives.classList.replace('d-block', 'd-none');
+- `melvoridle.com/assets/js/built/completionLog.js:608` - this.skillProgressBar.classList.replace('bg-info', 'bg-success');
+- `melvoridle.com/assets/js/built/completionLog.js:610` - this.skillProgressBar.classList.replace('bg-success', 'bg-info');
+- `melvoridle.com/assets/js/built/completionLog.js:623` - this.abyssalProgressBar.classList.replace('bg-danger', 'bg-success');
+- `melvoridle.com/assets/js/built/completionLog.js:625` - this.abyssalProgressBar.classList.replace('bg-success', 'bg-danger');
+- `melvoridle.com/assets/js/built/completionLog.js:711` - this.masteryProgressBar.classList.replace('bg-info', 'bg-success');
+- `melvoridle.com/assets/js/built/completionLog.js:713` - this.masteryProgressBar.classList.replace('bg-success', 'bg-info');
+- `melvoridle.com/assets/js/built/completionLog.js:1030` - btn.classList.replace('btn-info', 'btn-outline-info');
+- `melvoridle.com/assets/js/built/completionLog.js:1033` - btn.classList.replace('btn-outline-info', 'btn-info');
+
+## Lifecycle Hooks
+
+Lifecycle callbacks mods use to run after mod loading, character selection, character load, and interface readiness.
+
+- `melvoridle.com/assets/js/built/mod.js:1907` - yield contextApi.trigger.modsLoaded();
+- `melvoridle.com/assets/js/built/mod.js:4534` `modsLoaded()` - function modsLoaded() {
+- `melvoridle.com/assets/js/built/mod.js:4868` `onModsLoaded()` - function onModsLoaded(callback) {
+- `melvoridle.com/assets/js/built/mod.js:4869` `onModsLoaded` - if (typeof callback !== 'function') throw new Error(`[${mod.name}] Hook onModsLoaded requires a callback.`);
+- `melvoridle.com/assets/js/built/mod.js:4881` `onCharacterSelectionLoaded()` - function onCharacterSelectionLoaded(callback) {
+- `melvoridle.com/assets/js/built/mod.js:4883` `onCharacterSelectionLoaded` - throw new Error(`[${mod.name}] Hook onCharacterSelectionLoaded requires a callback.`);
+- `melvoridle.com/assets/js/built/mod.js:4895` `onInterfaceAvailable()` - function onInterfaceAvailable(callback) {
+- `melvoridle.com/assets/js/built/mod.js:4897` `onInterfaceAvailable` - throw new Error(`[${mod.name}] Hook onInterfaceAvailable requires a callback.`);
+- `melvoridle.com/assets/js/built/mod.js:4909` `onCharacterLoaded()` - function onCharacterLoaded(callback) {
+- `melvoridle.com/assets/js/built/mod.js:4911` `onCharacterLoaded` - throw new Error(`[${mod.name}] Hook onCharacterLoaded requires a callback.`);
+- `melvoridle.com/assets/js/built/mod.js:4923` `onInterfaceReady()` - function onInterfaceReady(callback) {
+- `melvoridle.com/assets/js/built/mod.js:4924` `onInterfaceReady` - if (typeof callback !== 'function') throw new Error(`[${mod.name}] Hook onInterfaceReady requires a callback.`);
+- `melvoridle.com/assets/js/built/mod.js:4984` `onModsLoaded` - onModsLoaded,
+- `melvoridle.com/assets/js/built/mod.js:4985` `onCharacterSelectionLoaded` - onCharacterSelectionLoaded,
+- `melvoridle.com/assets/js/built/mod.js:4986` `onInterfaceAvailable` - onInterfaceAvailable,
+- `melvoridle.com/assets/js/built/mod.js:4987` `onCharacterLoaded` - onCharacterLoaded,
+- `melvoridle.com/assets/js/built/mod.js:4988` `onInterfaceReady` - onInterfaceReady,
+- `melvoridle.com/assets/js/built/mod.js:5003` - modsLoaded,
+
+## Offline Processing
+
+Offline progress UI and loop events that performance-sensitive mods commonly need to observe or avoid disrupting.
+
+- `melvoridle.com/assets/js/built/bank2.js:684` - if (!loadingOfflineProgress) this.game.telemetry.createItemGainedEvent(item, quantity, itemSource);
+- `melvoridle.com/assets/js/built/characterSelectMenus.js:110` `if()` - if (headerInfo.offlineAction !== undefined) {
+- `melvoridle.com/assets/js/built/characterSelectMenus.js:111` - this.offlineActionImage.src = headerInfo.offlineAction.media;
+- `melvoridle.com/assets/js/built/characterSelectMenus.js:113` - this.offlineActionName.textContent = headerInfo.offlineAction.name;
+- `melvoridle.com/assets/js/built/combat.js:115` `offline-loading -> OfflineLoadingElement` - window.customElements.define('offline-loading', OfflineLoadingElement);
+- `melvoridle.com/assets/js/built/combatManager.js:524` - if (!loadingOfflineProgress) this.game.telemetry.createMonsterKillEvent(this.enemy.monster);
+- `melvoridle.com/assets/js/built/combatManager.js:1432` - this.game.clearActiveAction(!areaChange && !loadingOfflineProgress);
+- `melvoridle.com/assets/js/built/combatManager.js:1559` - if (!loadingOfflineProgress) notifyPlayer(this.game.prayer, getLangString('NOT_ENOUGH_SOUL_POINTS'), 'danger');
+- `melvoridle.com/assets/js/built/game.js:2107` - loadingOfflineProgress = true;
+- `melvoridle.com/assets/js/built/game.js:2146` - this._events.emit('offlineLoopEntered', new GameEvent());
+- `melvoridle.com/assets/js/built/game.js:2150` - loadingOfflineProgress = false;
+- `melvoridle.com/assets/js/built/game.js:2168` - this._events.emit('offlineLoopExited', new GameEvent());
+- `melvoridle.com/assets/js/built/game.js:2518` - let offlineAction = undefined;
+- `melvoridle.com/assets/js/built/game.js:2520` - offlineAction = this.activeActions.getObjectByID(idMap.offlineSkillToAction[saveGame.offline.skill]);
+- `melvoridle.com/assets/js/built/game.js:2528` - offlineAction,
+- `melvoridle.com/assets/js/built/game.js:2548` - let offlineAction = this.activeAction;
+- `melvoridle.com/assets/js/built/game.js:2549` - if (offlineAction === undefined) offlineAction = this.pausedAction;
+- `melvoridle.com/assets/js/built/game.js:2560` - offlineAction,
+- `melvoridle.com/assets/js/built/game.js:3354` `OfflineLoadingElement` - class OfflineLoadingElement extends HTMLElement {
+- `melvoridle.com/assets/js/built/game.js:3402` `OfflineProgressElement` - class OfflineProgressElement extends HTMLElement {
+- `melvoridle.com/assets/js/built/game.js:3413` `setMessages()` - setMessages(game, oldSnapshot, newSnapshot, timeDiff, offlineAction) {
+- `melvoridle.com/assets/js/built/game.js:3877` - if ((offlineAction === null \|\| offlineAction === void 0 ? void 0 : offlineAction.getOfflineMessages) !== undefined)
+- `melvoridle.com/assets/js/built/game.js:3878` - outputHeaders.push(...offlineAction.getOfflineMessages());
+- `melvoridle.com/assets/js/built/game.js:3903` `offline-progress -> OfflineProgressElement` - window.customElements.define('offline-progress', OfflineProgressElement);
+- `melvoridle.com/assets/js/built/main.js:53` - let loadingOfflineProgress = false;
+- `melvoridle.com/assets/js/built/main.js:597` - if (!isCreatingSave) yield delayUntilGameEvent(game, 'offlineLoopExited');
+- `melvoridle.com/assets/js/built/save.js:99` - !loadingOfflineProgress
+- `melvoridle.com/assets/js/built/saveWriter.js:614` - this.header.writeBoolean(headerInfo.offlineAction !== undefined);
+- `melvoridle.com/assets/js/built/saveWriter.js:615` `if()` - if (headerInfo.offlineAction !== undefined) {
+- `melvoridle.com/assets/js/built/saveWriter.js:616` - this.header.writeString(headerInfo.offlineAction.id);
+- `melvoridle.com/assets/js/built/saveWriter.js:638` - let offlineAction = undefined;
+- `melvoridle.com/assets/js/built/saveWriter.js:641` - offlineAction = game.activeActions.getObjectByID(activeActionID);
+- `melvoridle.com/assets/js/built/saveWriter.js:642` `if()` - if (offlineAction === undefined) {
+- `melvoridle.com/assets/js/built/saveWriter.js:643` - offlineAction = new DummyActiveAction(game.getDummyData(activeActionID));
+- `melvoridle.com/assets/js/built/saveWriter.js:673` - offlineAction,
+- `melvoridle.com/assets/js/built/summoning.js:488` - if (!this.game.settings.showSummoningMarkDiscoveryModals \|\| loadingOfflineProgress) return;
+- `melvoridle.com/assets/js/built/telemetry.js:117` - if (!this.isTelemetryEnabled \|\| loadingOfflineProgress \|\| game.currentGamemode.isEvent) return;
+- `melvoridle.com/assets/js/built/telemetry.js:137` - if (!this.isTelemetryEnabled \|\| loadingOfflineProgress \|\| game.currentGamemode.isEvent) return;
+
+## UI And Custom Elements
+
+Custom elements, templates, and DOM lifecycle methods that mods can inspect or mount near.
+
+- `melvoridle.com/assets/js/built/agility.js:729` - const element = createElement('div', { className: 'font-size-sm mb-1' });
+- `melvoridle.com/assets/js/built/agility.js:738` - const obstacleElement = createElement('span', {
+- `melvoridle.com/assets/js/built/agility.js:744` - const join = createElement('span', {
+- `melvoridle.com/assets/js/built/agility.js:750` - const pillars = createElement('div', { className: 'font-size-sm mb-2' });
+- `melvoridle.com/assets/js/built/agility.js:756` - const pillarElement = createElement('span', {
+- `melvoridle.com/assets/js/built/agility.js:769` - pillars.append(createElement('span', { text: ` -> ` }));
+- `melvoridle.com/assets/js/built/agility.js:776` - const container = createElement('div', {});
+- `melvoridle.com/assets/js/built/agility.js:778` - createElement('h5', {
+- `melvoridle.com/assets/js/built/agility.js:784` - const newReq = createElement('inline-requirement', {
+- `melvoridle.com/assets/js/built/agility.js:829` - const modifierContainer = createElement('div', { className: 'mb-2' });
+- `melvoridle.com/assets/js/built/agility.js:833` - const content = createElement('div');
+- `melvoridle.com/assets/js/built/agility.js:837` - createElement('h5', {
+- `melvoridle.com/assets/js/built/agilityMenus.js:4` `BuiltAgilityObstacleElement` - class BuiltAgilityObstacleElement extends HTMLElement {
+- `melvoridle.com/assets/js/built/agilityMenus.js:8` - this._content.append(getTemplateNode('built-agility-obstacle-template'));
+- `melvoridle.com/assets/js/built/agilityMenus.js:29` `connectedCallback()` - connectedCallback() {
+- `melvoridle.com/assets/js/built/agilityMenus.js:62` - createElement('span', {
+- `melvoridle.com/assets/js/built/agilityMenus.js:70` - this.unbuiltText.append(createElement('br'));
+- `melvoridle.com/assets/js/built/agilityMenus.js:71` - createElement('span', {
+- `melvoridle.com/assets/js/built/agilityMenus.js:108` - const span = createElement('span', { className: 'mr-2 ml-2', parent: this.itemCurrencyContainer });
+- `melvoridle.com/assets/js/built/agilityMenus.js:109` - createElement('img', { className: 'skill-icon-xs mr-2', attributes: [['src', currency.media]], parent: span });
+- `melvoridle.com/assets/js/built/agilityMenus.js:110` - createElement('span', { text: formatNumber(quantity), parent: span });
+- `melvoridle.com/assets/js/built/agilityMenus.js:113` - const span = createElement('span', { className: 'mr-2 ml-2', parent: this.itemCurrencyContainer });
+- `melvoridle.com/assets/js/built/agilityMenus.js:114` - createElement('img', { className: 'skill-icon-xs mr-2', attributes: [['src', item.media]], parent: span });
+- `melvoridle.com/assets/js/built/agilityMenus.js:115` - createElement('span', { text: formatNumber(quantity), parent: span });
+- `melvoridle.com/assets/js/built/agilityMenus.js:149` `built-agility-obstacle -> BuiltAgilityObstacleElement` - window.customElements.define('built-agility-obstacle', BuiltAgilityObstacleElement);
+- `melvoridle.com/assets/js/built/agilityMenus.js:150` `PassivePillarMenuElement` - class PassivePillarMenuElement extends HTMLElement {
+- `melvoridle.com/assets/js/built/agilityMenus.js:154` - this._content.append(getTemplateNode('passive-pillar-menu-template'));
+- `melvoridle.com/assets/js/built/agilityMenus.js:165` `connectedCallback()` - connectedCallback() {
+- `melvoridle.com/assets/js/built/agilityMenus.js:213` `passive-pillar-menu -> PassivePillarMenuElement` - window.customElements.define('passive-pillar-menu', PassivePillarMenuElement);
+- `melvoridle.com/assets/js/built/agilityMenus.js:215` `AgilityObstacleSelectionElement` - class AgilityObstacleSelectionElement extends HTMLElement {
+- `melvoridle.com/assets/js/built/agilityMenus.js:220` - this._content.append(getTemplateNode('agility-obstacle-selection-template'));
+- `melvoridle.com/assets/js/built/agilityMenus.js:248` `connectedCallback()` - connectedCallback() {
+- `melvoridle.com/assets/js/built/agilityMenus.js:252` - return createElement('inline-requirement', {
+- `melvoridle.com/assets/js/built/agilityMenus.js:304` - count: createElement('span', {
+- `melvoridle.com/assets/js/built/agilityMenus.js:320` - createElement('span', {
+- `melvoridle.com/assets/js/built/agilityMenus.js:357` - const span = createElement('span', { className: 'mr-2 ml-2', parent: this.itemCurrencyContainer });
+- `melvoridle.com/assets/js/built/agilityMenus.js:358` - createElement('img', { className: 'skill-icon-xs mr-2', attributes: [['src', currency.media]], parent: span });
+- `melvoridle.com/assets/js/built/agilityMenus.js:359` - createElement('span', { text: currency.formatAmount(formatNumber(quantity)), parent: span });
+- `melvoridle.com/assets/js/built/agilityMenus.js:362` - const span = createElement('span', { className: 'mr-2 ml-2', parent: this.itemCurrencyContainer });
+- `melvoridle.com/assets/js/built/agilityMenus.js:363` - createElement('img', { className: 'skill-icon-xs mr-2', attributes: [['src', item.media]], parent: span });
+- `melvoridle.com/assets/js/built/agilityMenus.js:364` - createElement('span', { text: numberWithCommas(quantity), parent: span });
+- `melvoridle.com/assets/js/built/agilityMenus.js:388` `agility-obstacle-selection -> AgilityObstacleSelectionElement` - window.customElements.define('agility-obstacle-selection', AgilityObstacleSelectionElement);
+- `melvoridle.com/assets/js/built/agilityMenus.js:389` `InlineRequirementElement` - class InlineRequirementElement extends HTMLElement {
+- `melvoridle.com/assets/js/built/agilityMenus.js:395` - this._content.append(getTemplateNode('inline-requirement-template'));
+- `melvoridle.com/assets/js/built/agilityMenus.js:412` `connectedCallback()` - connectedCallback() {
+- `melvoridle.com/assets/js/built/agilityMenus.js:423` `disconnectedCallback()` - disconnectedCallback() {
+- `melvoridle.com/assets/js/built/agilityMenus.js:427` `inline-requirement -> InlineRequirementElement` - window.customElements.define('inline-requirement', InlineRequirementElement);
+- `melvoridle.com/assets/js/built/agilityMenus.js:428` `MultiProgressBarElement` - class MultiProgressBarElement extends HTMLElement {
+- `melvoridle.com/assets/js/built/agilityMenus.js:436` - this._content.append(getTemplateNode('multi-progress-bar-template'));
+- `melvoridle.com/assets/js/built/agilityMenus.js:439` `connectedCallback()` - connectedCallback() {
+- `melvoridle.com/assets/js/built/agilityMenus.js:468` - const container = createElement('div', {
+- `melvoridle.com/assets/js/built/agilityMenus.js:473` - const bar = createElement('div', {
+- `melvoridle.com/assets/js/built/agilityMenus.js:532` `multi-progress-bar -> MultiProgressBarElement` - window.customElements.define('multi-progress-bar', MultiProgressBarElement);
+- `melvoridle.com/assets/js/built/agilityMenus.js:533` `AgilityBreakdownElement` - class AgilityBreakdownElement extends HTMLElement {
+- `melvoridle.com/assets/js/built/agilityMenus.js:538` - this._content.append(getTemplateNode('agility-breakdown-template'));
+- `melvoridle.com/assets/js/built/agilityMenus.js:556` `connectedCallback()` - connectedCallback() {
+- `melvoridle.com/assets/js/built/agilityMenus.js:584` - const span = createElement('span', { className: 'm-1 ml-2 no-wrap', parent: this.currencyContainer });
+- `melvoridle.com/assets/js/built/agilityMenus.js:585` - createElement('img', { className: 'skill-icon-xxs mr-1', attributes: [['src', currency.media]], parent: span });
+- `melvoridle.com/assets/js/built/agilityMenus.js:586` - createElement('span', { text: currency.formatAmount(formatNumber(quantity)), parent: span });
+- `melvoridle.com/assets/js/built/agilityMenus.js:590` - const span = createElement('span', { className: 'm-1 ml-2 no-wrap', parent: this.itemsContainer });
+- `melvoridle.com/assets/js/built/agilityMenus.js:591` - createElement('img', { className: 'skill-icon-xxs mr-1', attributes: [['src', item.media]], parent: span });
+- `melvoridle.com/assets/js/built/agilityMenus.js:592` - createElement('span', { text: numberWithCommas(quantity), parent: span });
+- `melvoridle.com/assets/js/built/agilityMenus.js:651` `agility-breakdown -> AgilityBreakdownElement` - window.customElements.define('agility-breakdown', AgilityBreakdownElement);
+- `melvoridle.com/assets/js/built/altMagicMenu.js:2` `AltMagicMenuElement` - class AltMagicMenuElement extends HTMLElement {
+- `melvoridle.com/assets/js/built/altMagicMenu.js:6` - this._content.append(getTemplateNode('alt-magic-menu-template'));
+- `melvoridle.com/assets/js/built/altMagicMenu.js:26` `connectedCallback()` - connectedCallback() {
+- `melvoridle.com/assets/js/built/altMagicMenu.js:165` `alt-magic-menu -> AltMagicMenuElement` - window.customElements.define('alt-magic-menu', AltMagicMenuElement);
+- `melvoridle.com/assets/js/built/altMagicMenu.js:166` `AltMagicItemMenuElement` - class AltMagicItemMenuElement extends HTMLElement {
+- `melvoridle.com/assets/js/built/altMagicMenu.js:170` - this._content.append(getTemplateNode('alt-magic-item-menu-template'));
+- `melvoridle.com/assets/js/built/altMagicMenu.js:172` - const selectItemTemplate = document.getElementById('alt-magic-item-select-template');
+- `melvoridle.com/assets/js/built/altMagicMenu.js:174` - throw new Error('Template does not exist');
+- `melvoridle.com/assets/js/built/altMagicMenu.js:176` - const selectBarFragment = document.getElementById('alt-magic-bar-select-template');
+- `melvoridle.com/assets/js/built/altMagicMenu.js:178` - throw new Error('Template does not exist');
+- `melvoridle.com/assets/js/built/altMagicMenu.js:180` - const lockedBarTemplate = document.getElementById('alt-magic-bar-locked-template');
+- `melvoridle.com/assets/js/built/altMagicMenu.js:182` - throw new Error('Template does not exist');
+- `melvoridle.com/assets/js/built/altMagicMenu.js:185` `connectedCallback()` - connectedCallback() {
+- `melvoridle.com/assets/js/built/altMagicMenu.js:210` - skillImage: createElement('img', {
+- `melvoridle.com/assets/js/built/altMagicMenu.js:244` `alt-magic-item-menu -> AltMagicItemMenuElement` - window.customElements.define('alt-magic-item-menu', AltMagicItemMenuElement);
+- `melvoridle.com/assets/js/built/ancientRelics.js:80` `AncientRelicElement` - class AncientRelicElement extends HTMLElement {
+- `melvoridle.com/assets/js/built/ancientRelics.js:84` - this._content.append(getTemplateNode('ancient-relic-template'));
+
+## Rendering
+
+Rendering flags, render methods, and render queues that can be expensive during offline progress or UI updates.
+
+- `melvoridle.com/assets/js/built/agility.js:292` - this.renderQueue = new AgilityRenderQueue();
+- `melvoridle.com/assets/js/built/agility.js:586` - this.renderQueue.obstacleHighlights.add(this.currentlyActiveObstacle);
+- `melvoridle.com/assets/js/built/agility.js:587` - this.renderQueue.startButtons = true;
+- `melvoridle.com/assets/js/built/agility.js:591` - this.renderQueue.obstacleHighlights.add(this.currentlyActiveObstacle);
+- `melvoridle.com/assets/js/built/agility.js:593` - this.renderQueue.startButtons = true;
+- `melvoridle.com/assets/js/built/agility.js:598` - this.renderQueue.obstacleHighlights.add(this.currentlyActiveObstacle); // Remove Highlight
+- `melvoridle.com/assets/js/built/agility.js:601` - this.renderQueue.obstacleRates = true;
+- `melvoridle.com/assets/js/built/agility.js:613` - this.renderQueue.obstacleHighlights.add(this.currentlyActiveObstacle); // Add Highlight
+- `melvoridle.com/assets/js/built/agility.js:621` - this.renderQueue.obstacleModifiers = true;
+- `melvoridle.com/assets/js/built/agility.js:878` - this.renderQueue.builtObstacles = true;
+- `melvoridle.com/assets/js/built/agility.js:879` - this.renderQueue.obstacleRates = true;
+- `melvoridle.com/assets/js/built/agility.js:880` - this.renderQueue.obstacleModifiers = true;
+- `melvoridle.com/assets/js/built/agility.js:881` - this.renderQueue.startButtons = true;
+- `melvoridle.com/assets/js/built/agility.js:885` - this.renderQueue.progressBar = true;
+- `melvoridle.com/assets/js/built/agility.js:886` - this.renderQueue.obstacleHighlights.add(this.currentlyActiveObstacle);
+- `melvoridle.com/assets/js/built/agility.js:905` - this.renderQueue.obstacleRates = true;
+- `melvoridle.com/assets/js/built/agility.js:911` - this.renderQueue.builtObstacles = true;
+- `melvoridle.com/assets/js/built/agility.js:916` - this.renderQueue.obstacleRates = true;
+- `melvoridle.com/assets/js/built/agility.js:917` - this.renderQueue.obstacleModifiers = true;
+- `melvoridle.com/assets/js/built/agility.js:922` - this.renderQueue.builtObstacles = true;
+- `melvoridle.com/assets/js/built/agility.js:923` - this.renderQueue.obstacleModifiers = true;
+- `melvoridle.com/assets/js/built/agility.js:924` - this.renderQueue.obstacleRates = true;
+- `melvoridle.com/assets/js/built/agility.js:942` `render()` - render() {
+- `melvoridle.com/assets/js/built/agility.js:943` - super.render();
+- `melvoridle.com/assets/js/built/agility.js:952` - if (!this.renderQueue.obstacleRates) return;
+- `melvoridle.com/assets/js/built/agility.js:993` - this.renderQueue.obstacleRates = false;
+- `melvoridle.com/assets/js/built/agility.js:1016` - if (!this.renderQueue.builtObstacles) return;
+- `melvoridle.com/assets/js/built/agility.js:1067` - this.renderQueue.builtObstacles = false;
+- `melvoridle.com/assets/js/built/agility.js:1070` - if (!this.renderQueue.obstacleModifiers) return;
+- `melvoridle.com/assets/js/built/agility.js:1077` - this.renderQueue.obstacleModifiers = false;
+- `melvoridle.com/assets/js/built/agility.js:1080` - if (this.renderQueue.obstacleHighlights.size === 0) return;
+- `melvoridle.com/assets/js/built/agility.js:1081` - this.renderQueue.obstacleHighlights.forEach((tier) => {
+- `melvoridle.com/assets/js/built/agility.js:1084` - this.renderQueue.obstacleHighlights.clear();
+- `melvoridle.com/assets/js/built/agility.js:1087` - if (!this.renderQueue.progressBar) return;
+- `melvoridle.com/assets/js/built/agility.js:1095` - this.renderQueue.progressBar = false;
+- `melvoridle.com/assets/js/built/agility.js:1098` - if (!this.renderQueue.startButtons) return;
+- `melvoridle.com/assets/js/built/agility.js:1108` - this.renderQueue.startButtons = false;
+- `melvoridle.com/assets/js/built/agility.js:1207` - this.renderQueue.builtObstacles = true;
+- `melvoridle.com/assets/js/built/agility.js:1208` - this.renderQueue.obstacleRates = true;
+- `melvoridle.com/assets/js/built/agility.js:1226` - this.renderQueue.obstacleModifiers = true;
+- `melvoridle.com/assets/js/built/agility.js:1234` - this.renderQueue.obstacleModifiers = true;
+- `melvoridle.com/assets/js/built/agility.js:1578` - this.renderQueue.obstacleHighlights.add(this.currentlyActiveObstacle);
+- `melvoridle.com/assets/js/built/agility.js:1579` - this.renderQueue.startButtons = true;
+- `melvoridle.com/assets/js/built/altMagic.js:146` - this.renderQueue = new AltMagicRenderQueue();
+- `melvoridle.com/assets/js/built/altMagic.js:311` - this.renderQueue.selectedSpellImage = true;
+- `melvoridle.com/assets/js/built/altMagic.js:312` - this.renderQueue.selectedSpellInfo = true;
+- `melvoridle.com/assets/js/built/altMagic.js:315` - this.render();
+- `melvoridle.com/assets/js/built/altMagic.js:363` - this.renderQueue.selectedSpellInfo = true;
+- `melvoridle.com/assets/js/built/altMagic.js:366` - this.render();
+- `melvoridle.com/assets/js/built/altMagic.js:373` - this.renderQueue.selectedSpellInfo = true;
+- `melvoridle.com/assets/js/built/altMagic.js:376` - this.render();
+- `melvoridle.com/assets/js/built/altMagic.js:687` - this.renderQueue.quantities = true;
+- `melvoridle.com/assets/js/built/altMagic.js:691` - this.renderQueue.selectedSpellImage = true;
+- `melvoridle.com/assets/js/built/altMagic.js:692` - if (this.selectedSpell !== undefined) this.renderQueue.selectedSpellInfo = true;
+- `melvoridle.com/assets/js/built/altMagic.js:693` - this.renderQueue.selectionTab = true;
+- `melvoridle.com/assets/js/built/altMagic.js:695` - this.renderQueue.progressBar = true;
+- `melvoridle.com/assets/js/built/altMagic.js:697` - this.render();
+- `melvoridle.com/assets/js/built/altMagic.js:702` - this.renderQueue.selectedSpellInfo = true;
+- `melvoridle.com/assets/js/built/altMagic.js:703` - this.render();
+- `melvoridle.com/assets/js/built/altMagic.js:706` - this.renderQueue.quantities = true;
+- `melvoridle.com/assets/js/built/altMagic.js:710` - this.renderQueue.quantities = true;
+- `melvoridle.com/assets/js/built/altMagic.js:715` - this.renderQueue.selectionTab = true;
+- `melvoridle.com/assets/js/built/altMagic.js:719` - if (this.selectedSpell !== undefined) this.renderQueue.selectedSpellInfo = true;
+- `melvoridle.com/assets/js/built/altMagic.js:730` - this.renderQueue.selectedSpellInfo = true;
+- `melvoridle.com/assets/js/built/altMagic.js:733` - this.renderQueue.selectedSpellInfo = true;
+- `melvoridle.com/assets/js/built/altMagic.js:735` `render()` - render() {
+- `melvoridle.com/assets/js/built/altMagic.js:736` - super.render();
+- `melvoridle.com/assets/js/built/altMagic.js:744` - if (!this.renderQueue.progressBar) return;
+- `melvoridle.com/assets/js/built/altMagic.js:746` - this.renderQueue.progressBar = false;
+- `melvoridle.com/assets/js/built/altMagic.js:749` - if (!this.renderQueue.selectedSpellImage) return;
+- `melvoridle.com/assets/js/built/altMagic.js:755` - this.renderQueue.selectedSpellImage = false;
+- `melvoridle.com/assets/js/built/altMagic.js:758` - if (!this.renderQueue.selectedSpellInfo) return;
+- `melvoridle.com/assets/js/built/altMagic.js:777` - this.renderQueue.selectedSpellInfo = false;
+- `melvoridle.com/assets/js/built/altMagic.js:780` - if (!this.renderQueue.quantities) return;
+- `melvoridle.com/assets/js/built/altMagic.js:782` - this.renderQueue.quantities = false;
+- `melvoridle.com/assets/js/built/altMagic.js:785` - if (!this.renderQueue.selectionTab) return;
+- `melvoridle.com/assets/js/built/altMagic.js:787` - this.renderQueue.selectionTab = false;
+- `melvoridle.com/assets/js/built/archaeology.js:281` - this.renderQueue = new ArchaeologyRenderQueue();
+- `melvoridle.com/assets/js/built/archaeology.js:354` - this.renderQueue.digSiteVisibility = true;
+- `melvoridle.com/assets/js/built/archaeology.js:356` `render()` - render() {
+
+## Game Events
+
+Event emitters and event names useful for cache invalidation, profiling, and cross-system observation.
+
+- `melvoridle.com/assets/js/built/agility.js:580` - this._events.emit('action', actionEvent);
+- `melvoridle.com/assets/js/built/altMagic.js:571` - this._events.emit('runesUsed', runeConsumptionEvent);
+- `melvoridle.com/assets/js/built/altMagic.js:681` - this._events.emit('action', actionEvent);
+- `melvoridle.com/assets/js/built/archaeology.js:718` - this._events.emit('action', actionEvent);
+- `melvoridle.com/assets/js/built/archaeology.js:1130` - this._events.emit('itemDonated', new ArchaeologyItemDonatedEvent(oldCount, this.donationCount));
+- `melvoridle.com/assets/js/built/archaeology.js:1344` - this._events.emit('itemDonated', new ArchaeologyItemDonatedEvent(oldCount, this.donationCount));
+- `melvoridle.com/assets/js/built/astrology.js:452` - this._events.emit('action', actionEvent);
+- `melvoridle.com/assets/js/built/bank2.js:676` - this._events.emit('itemFound', event);
+- `melvoridle.com/assets/js/built/bank2.js:677` - if (this.emitItemEvents) item.emit('found', event);
+- `melvoridle.com/assets/js/built/bank2.js:693` - this._events.emit('itemChanged', event);
+- `melvoridle.com/assets/js/built/bank2.js:694` - if (this.emitItemEvents) item.emit('bankQuantityChanged', event);
+- `melvoridle.com/assets/js/built/bank2.js:736` - this._events.emit('itemChanged', event);
+- `melvoridle.com/assets/js/built/bank2.js:737` - if (this.emitItemEvents) item.emit('bankQuantityChanged', event);
+- `melvoridle.com/assets/js/built/baseManager.js:589` - this._events.emit('startOfFight', new StartOfFightEvent());
+- `melvoridle.com/assets/js/built/baseManager.js:598` - this._events.emit('endOfFight', new EndOfFightEvent());
+- `melvoridle.com/assets/js/built/cartography.js:728` - this.game.off('requirementChange', this.hiddenPOIDiscoveryHandler);
+- `melvoridle.com/assets/js/built/cartography.js:738` - this.game.on('requirementChange', this.hiddenPOIDiscoveryHandler);
+- `melvoridle.com/assets/js/built/cartography.js:846` - this._events.emit('travel', actionEvent);
+- `melvoridle.com/assets/js/built/cartography.js:1151` - this._events.emit('survey', actionEvent);
+- `melvoridle.com/assets/js/built/cartography.js:1175` - this._events.emit('survey', actionEvent);
+- `melvoridle.com/assets/js/built/cartography.js:1223` - this._events.emit(
+- `melvoridle.com/assets/js/built/cartography.js:1435` - this._events.emit('poiDiscovered', new CartographyPOIDiscoveredEvent(map, poi));
+- `melvoridle.com/assets/js/built/cartography.js:1600` - this._events.emit('madePaper', actionEvent);
+- `melvoridle.com/assets/js/built/cartography.js:1810` - this._events.emit('upgradeMap', actionEvent);
+- `melvoridle.com/assets/js/built/cartography.js:1949` - this._events.emit('mapRefinement', new CartographyMapRefinementEvent(this, map));
+- `melvoridle.com/assets/js/built/cartography.js:2380` - modal.on('show.bs.modal', () => {
+- `melvoridle.com/assets/js/built/cartography.js:2384` - modal.on('hidden.bs.modal', () => {
+- `melvoridle.com/assets/js/built/cartography.js:2424` - this.game.on('requirementChange', this.hiddenPOIRenderHandler);
+- `melvoridle.com/assets/js/built/cartography.js:2453` - this.game.off('requirementChange', this.hiddenPOIRenderHandler);
+- `melvoridle.com/assets/js/built/cartographyMenu.js:281` - this.viewport.on('zoomed', zoomListener);
+- `melvoridle.com/assets/js/built/cartographyMenu.js:285` - this.viewport.on('zoomed-end', zoomEndListener);
+- `melvoridle.com/assets/js/built/cartographyMenu.js:290` - this.viewport.on('moved', movedListener);
+- `melvoridle.com/assets/js/built/cartographyMenu.js:294` - this.viewport.on('moved-end', movedEndListener);
+- `melvoridle.com/assets/js/built/cartographyMenu.js:296` - this.viewport.off('zoomed-end', zoomEndListener);
+- `melvoridle.com/assets/js/built/cartographyMenu.js:297` - this.viewport.off('zoomed', zoomListener);
+- `melvoridle.com/assets/js/built/cartographyMenu.js:298` - this.viewport.off('moved', movedListener);
+- `melvoridle.com/assets/js/built/cartographyMenu.js:299` - this.viewport.off('moved-end', movedEndListener);
+- `melvoridle.com/assets/js/built/cartographyMenu.js:1124` - displayObj.on('mouseover', mouseover);
+- `melvoridle.com/assets/js/built/cartographyMenu.js:1125` - displayObj.on('mouseout', mouseout);
+- `melvoridle.com/assets/js/built/cartographyMenu.js:1126` - displayObj.on('removed', removed);
+- `melvoridle.com/assets/js/built/cartographyMenu.js:1203` - displayObj.on('pointerdown', this.updateViewCoords);
+- `melvoridle.com/assets/js/built/cartographyMenu.js:1204` - displayObj.on('pointertap', () => {
+- `melvoridle.com/assets/js/built/cartographyMenu.js:2300` - this.parent.on('moved', (e) => {
+- `melvoridle.com/assets/js/built/cartographyMenu.js:2372` - this.parent.emit('moved', { viewport: this.parent, type: 'animate', original });
+- `melvoridle.com/assets/js/built/cartographyMenu.js:2373` - if (this._velocity.x === 0 && this._velocity.y === 0) this.parent.emit('moved-end', this.parent);
+- `melvoridle.com/assets/js/built/cartographyMenu.js:2387` - this.parent.on('zoomed', (e) => {
+- `melvoridle.com/assets/js/built/cartographyMenu.js:2394` - this.parent.on('zoomed-end', () => {
+- `melvoridle.com/assets/js/built/cartographyMenu.js:2397` - this.parent.on('moved', (e) => {
+- `melvoridle.com/assets/js/built/cartographyMenu.js:2400` - this.parent.on('moved-end', () => {
+- `melvoridle.com/assets/js/built/cartographyMenu.js:2403` - this.parent.on('drag-start', () => {
+- `melvoridle.com/assets/js/built/cartographyMenu.js:2407` - this.parent.on('drag-end', () => {
+- `melvoridle.com/assets/js/built/character.js:256` - this._events.emit(
+- `melvoridle.com/assets/js/built/character.js:276` - this._events.emit(
+- `melvoridle.com/assets/js/built/character.js:783` - this._events.emit('rebirth', new CharacterRebirthEvent());
+- `melvoridle.com/assets/js/built/character.js:808` - this._events.emit(
+- `melvoridle.com/assets/js/built/character.js:842` - this._events.emit(
+- `melvoridle.com/assets/js/built/character.js:932` - this.on('preAttack', (e) =>
+- `melvoridle.com/assets/js/built/character.js:935` - this.on('beingAttacked', (e) => {
+- `melvoridle.com/assets/js/built/character.js:938` - this.on('hitByAttack', (e) => {
+- `melvoridle.com/assets/js/built/character.js:942` - this.on('evadedAttack', (e) => {
+- `melvoridle.com/assets/js/built/character.js:945` - this.on('hitWithAttack', (e) => {
+- `melvoridle.com/assets/js/built/character.js:951` - this.on('attack', (e) => {
+- `melvoridle.com/assets/js/built/character.js:956` - this.on('wasAttacked', (e) => {
+- `melvoridle.com/assets/js/built/character.js:959` - this.on('rebirth', (e) => {
+- `melvoridle.com/assets/js/built/character.js:962` `onEffectApplicatorTrigger` - this.manager.on('startOfFight', (e) => this.onEffectApplicatorTrigger('StartOfFight', { type: 'Other' }));
+- `melvoridle.com/assets/js/built/character.js:988` - this._events.emit('effectGroupApplied', new CharacterEffectGroupAppliedEvent(group));
+- `melvoridle.com/assets/js/built/character.js:991` - this._events.emit('effectApplied', new CharacterEffectAppliedEvent(effect));
+- `melvoridle.com/assets/js/built/character.js:1057` - this._events.emit('effectGroupRemoved', new CharacterEffectGroupRemovedEvent(group));
+- `melvoridle.com/assets/js/built/character.js:1061` - this._events.emit('effectRemoved', new CharacterEffectRemovedEvent(effect));
+- `melvoridle.com/assets/js/built/character.js:1090` - this._events.emit('preAttack', new CharacterAttackEvent('Pre', attackEventData));
+- `melvoridle.com/assets/js/built/character.js:1091` - target._events.emit('beingAttacked', new CharacterAttackedEvent('Being', attackedEventData));
+- `melvoridle.com/assets/js/built/character.js:1177` - this._events.emit('hitWithAttack', new CharacterAttackEvent('Hit', attackEventData));
+- `melvoridle.com/assets/js/built/character.js:1178` - target._events.emit('hitByAttack', new CharacterAttackedEvent('Hit', attackedEventData));
+- `melvoridle.com/assets/js/built/character.js:1183` - this._events.emit('missedWithAttack', new CharacterAttackEvent('Miss', attackEventData));
+- `melvoridle.com/assets/js/built/character.js:1184` - target._events.emit('evadedAttack', new CharacterAttackedEvent('Evaded', attackedEventData));
+- `melvoridle.com/assets/js/built/character.js:1214` - this._events.emit('attack', event);
+- `melvoridle.com/assets/js/built/character.js:1215` - target._events.emit('wasAttacked', new CharacterAttackedEvent('Was', attackedEventData));
+- `melvoridle.com/assets/js/built/character.js:1510` - this._events.emit('endOfTurn', new CharacterEndOfTurnEvent());
+- `melvoridle.com/assets/js/built/clueHunt.js:65` - game.combat.off('monsterKilled', this.updateClue1Progress);
+- `melvoridle.com/assets/js/built/clueHunt.js:81` - game.township.tasks.off('townshipTaskCompleted', this.updateClue2Progress);
+
+## Skipped Files
+
+_No files skipped._
+

@@ -14,9 +14,13 @@ function hasOwn(object, key) {
   return Object.prototype.hasOwnProperty.call(object, key);
 }
 
-function startServer(t) {
+function startServer(t, options = {}) {
   const child = spawn(process.execPath, [SERVER_PATH], {
     cwd: REPO_ROOT,
+    env: {
+      ...process.env,
+      ...(options.env || {}),
+    },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   const stdout = readline.createInterface({ input: child.stdout });
@@ -120,6 +124,14 @@ test('MCP tool schemas are OpenAI-compatible at the top level', async (t) => {
   assert.ok(toolNames.has('game_session_action'));
   assert.ok(toolNames.has('game_profile_start'));
   assert.ok(toolNames.has('game_profile_read'));
+  assert.match(
+    tools.find((tool) => tool.name === 'melvor_modding_guides_list')?.description || '',
+    /packaged Melvor modding documentation index/
+  );
+  assert.match(
+    tools.find((tool) => tool.name === 'melvor_modding_guides_search')?.description || '',
+    /ctx\.patch/
+  );
 
   const failures = [];
   for (const tool of tools) {
@@ -180,6 +192,21 @@ test('local modding docs are readable through guide tools', async (t) => {
   const client = startServer(t);
   await initialize(client);
 
+  const overviewResponse = await client.request('tools/call', {
+    name: 'melvor_modding_guides_read',
+    arguments: {
+      page: 'README',
+      maxChars: 0,
+    },
+  });
+
+  assert.equal(overviewResponse.error, undefined);
+  assert.equal(overviewResponse.result.isError, false);
+  const overview = JSON.parse(overviewResponse.result.content[0].text);
+  assert.equal(overview.source, 'local');
+  assert.match(overview.text, /packaged documentation corpus/);
+  assert.match(overview.text, /local-mod-writing-patterns\.md/);
+
   const response = await client.request('tools/call', {
     name: 'melvor_modding_guides_read',
     arguments: {
@@ -194,4 +221,104 @@ test('local modding docs are readable through guide tools', async (t) => {
   assert.equal(doc.source, 'local');
   assert.match(doc.text, /mct_i--loading-mod/);
   assert.match(doc.text, /Linked Mod\.io Mods/);
+
+  const sectionResponse = await client.request('tools/call', {
+    name: 'melvor_modding_guides_read',
+    arguments: {
+      page: 'creator-toolkit-local-mods',
+      section: 'local-storage-guard',
+      maxChars: 0,
+    },
+  });
+
+  assert.equal(sectionResponse.error, undefined);
+  assert.equal(sectionResponse.result.isError, false);
+  const section = JSON.parse(sectionResponse.result.content[0].text);
+  assert.equal(section.source, 'local');
+  assert.equal(section.section.anchor, 'local-storage-guard');
+  assert.match(section.text, /mct_i--loading-mod/);
+  assert.doesNotMatch(section.text, /Linked Mod\.io Mods/);
+});
+
+test('packaged assets JS documentation is searchable through guide tools', async (t) => {
+  const client = startServer(t);
+  await initialize(client);
+
+  const readResponse = await client.request('tools/call', {
+    name: 'melvor_modding_guides_read',
+    arguments: {
+      page: 'game-source-assets-js',
+      maxChars: 0,
+    },
+  });
+
+  assert.equal(readResponse.error, undefined);
+  assert.equal(readResponse.result.isError, false);
+  const doc = JSON.parse(readResponse.result.content[0].text);
+  assert.equal(doc.source, 'local');
+  assert.match(doc.title, /Melvor Idle Web Game JS Assets Catalog/);
+  assert.match(doc.text, /Compiled core game logic & UI modules/);
+
+  const searchResponse = await client.request('tools/call', {
+    name: 'melvor_modding_guides_search',
+    arguments: {
+      query: 'Compiled core game logic & UI modules',
+      maxResults: 1,
+    },
+  });
+
+  assert.equal(searchResponse.error, undefined);
+  assert.equal(searchResponse.result.isError, false);
+  const search = JSON.parse(searchResponse.result.content[0].text);
+  const result = search.results.find((entry) => entry.title === doc.title && entry.source === 'local');
+  assert.ok(result);
+  assert.equal(result.section.anchor, 'directory-layout');
+  assert.deepEqual(result.read, {
+    page: 'game-source-assets-js',
+    section: 'directory-layout',
+  });
+  assert.ok(result.snippet.length < doc.text.length / 2);
+});
+
+test('guide search returns mod-writing chunks instead of whole docs', async (t) => {
+  const client = startServer(t);
+  await initialize(client);
+
+  const searchResponse = await client.request('tools/call', {
+    name: 'melvor_modding_guides_search',
+    arguments: {
+      query: 'ctx.patch before after replace',
+      maxResults: 1,
+      includeOfficial: false,
+    },
+  });
+
+  assert.equal(searchResponse.error, undefined);
+  assert.equal(searchResponse.result.isError, false);
+  const search = JSON.parse(searchResponse.result.content[0].text);
+  assert.equal(search.results.length, 1);
+  const [result] = search.results;
+  assert.match(result.title, /Local Mod Writing Patterns/);
+  assert.ok(result.section.anchor);
+  assert.equal(result.read.page, 'local-mod-writing-patterns');
+  assert.equal(result.read.section, result.section.anchor);
+  assert.match(result.snippet, /ctx\.patch/);
+  assert.ok(result.matchedTerms.includes('ctx.patch'));
+  assert.ok(result.score > 0);
+
+  const readResponse = await client.request('tools/call', {
+    name: 'melvor_modding_guides_read',
+    arguments: {
+      page: result.read.page,
+      section: result.read.section,
+      maxChars: 0,
+    },
+  });
+
+  assert.equal(readResponse.error, undefined);
+  assert.equal(readResponse.result.isError, false);
+  const doc = JSON.parse(readResponse.result.content[0].text);
+  assert.equal(doc.section.anchor, result.section.anchor);
+  assert.match(doc.text, /ctx\.patch/);
+  assert.ok(doc.text.length < 4000);
 });
