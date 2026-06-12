@@ -104,6 +104,19 @@ npm run mod:profile -- --mod-path /path/to/mod --duration-ms 15000
 
 Reports, screenshots, and traces are written under ignored `reports/`.
 
+
+## MCP Release And mod.io Tools
+
+The MCP server can inspect and prepare releases for mods kept in a separate workspace, without committing or uploading game source. Point the tools at the workspace root that contains `mods/` and `config/modio-matches.json`.
+
+Useful tools:
+
+- `melvor_mod_release_status`: read local manifests, Git state, release policy, and current mod.io versions.
+- `melvor_mod_release_package`: build or plan `releases/<mod>/<mod>-<version>.zip` for a releasable mod.
+- `melvor_modio_upload`: upload a prepared zip to mod.io. This is dry-run by default and requires `apply: true` plus the exact confirmation phrase returned by the dry-run.
+
+Release uploads are blocked for `reference_only` mods and for any mod whose workspace mapping does not set `automation.upload` to `true`. Read credentials from an ignored workspace `.env`; do not put API keys or OAuth tokens in this repository.
+
 ## Mod Manager Sources
 
 Put Melvor Cloud credentials in `.env` when you want browser automation to sign in:

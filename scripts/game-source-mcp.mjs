@@ -34,6 +34,9 @@ const DEFAULT_SOURCE_REPO = process.env.GAME_SOURCE_REPO
 const DEFAULT_MODS_ROOT = process.env.MELVOR_MODS_ROOT || path.join(REPO_ROOT, 'mods');
 const DEFAULT_REPORTS_DIR = process.env.MELVOR_REPORTS_DIR || path.join(REPO_ROOT, 'reports');
 const DEFAULT_MOD_SOURCES_DIR = process.env.MELVOR_MOD_SOURCES_DIR || path.join(REPO_ROOT, 'mod-sources');
+const DEFAULT_MODIO_GAME_ID = process.env.MODIO_GAME_ID || '2869';
+const DEFAULT_MODIO_GAME_API_BASE_URL = process.env.MODIO_GAME_API_BASE_URL || `https://g-${DEFAULT_MODIO_GAME_ID}.modapi.io/v1`;
+const DEFAULT_MODIO_FILE_FIELD = process.env.MODIO_FILE_FIELD || 'filedata';
 const DEFAULT_GUIDES_API_URL = process.env.MELVOR_GUIDES_API_URL || 'https://wiki.melvoridle.com/api.php';
 const DEFAULT_GUIDES_BASE_URL = process.env.MELVOR_GUIDES_BASE_URL || 'https://wiki.melvoridle.com/w/';
 const DEFAULT_GUIDES_PREFIX = process.env.MELVOR_GUIDES_PREFIX || 'Mod Creation';
@@ -282,6 +285,71 @@ const TOOLS = [
         reportDir: { type: 'string', description: 'Output directory for screenshots and JSON reports. Defaults to ignored reports/.' },
         storageState: { type: 'string', description: 'Optional Playwright storage state file to reuse/save login.' },
       },
+    },
+  },
+  {
+    name: 'melvor_mod_release_status',
+    title: 'Check Melvor Mod Release Status',
+    description: 'Read local mod manifests, policy mapping, git state, and current mod.io records before a release. This is read-only and does not upload.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        mod: { type: 'string', description: 'Optional local mod folder name. Omit to inspect all mapped mods.' },
+        workspaceRoot: { type: 'string', description: 'Workspace root containing mods/ and config/modio-matches.json.' },
+        modsRoot: { type: 'string', description: 'Override mods directory.' },
+        mappingFile: { type: 'string', description: 'Override mod.io policy mapping file.' },
+        envFile: { type: 'string', description: 'Optional .env file containing MODIO_API_KEY and release credentials.' },
+        apiBase: { type: 'string', description: 'mod.io game API base URL. Defaults to Melvor production game API.' },
+        gameId: { type: 'string', default: '2869' },
+        refreshModio: { type: 'boolean', default: true, description: 'Fetch current mod.io records with MODIO_API_KEY when available.' },
+        includeReferenceOnly: { type: 'boolean', default: true },
+      },
+    },
+  },
+  {
+    name: 'melvor_mod_release_package',
+    title: 'Package Melvor Mod Release',
+    description: 'Create or plan a versioned release zip for a local Melvor mod. Reference-only mods are blocked.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        mod: { type: 'string', description: 'Local mod folder name.' },
+        workspaceRoot: { type: 'string', description: 'Workspace root containing mods/.' },
+        modsRoot: { type: 'string', description: 'Override mods directory.' },
+        mappingFile: { type: 'string', description: 'Override mod.io policy mapping file.' },
+        envFile: { type: 'string', description: 'Optional .env file.' },
+        outDir: { type: 'string', description: 'Release output directory. Defaults to <workspace>/releases/<mod>.' },
+        build: { type: 'boolean', default: true, description: 'When false, only report the expected zip path.' },
+        refreshModio: { type: 'boolean', default: true },
+      },
+      required: ['mod'],
+    },
+  },
+  {
+    name: 'melvor_modio_upload',
+    title: 'Upload Melvor Modfile To mod.io',
+    description: 'Upload a release zip to mod.io using OAuth credentials. Dry-run by default; requires apply=true and an exact confirmation phrase.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        mod: { type: 'string', description: 'Local mod folder name.' },
+        workspaceRoot: { type: 'string', description: 'Workspace root containing mods/ and config/modio-matches.json.' },
+        modsRoot: { type: 'string', description: 'Override mods directory.' },
+        mappingFile: { type: 'string', description: 'Override mod.io policy mapping file.' },
+        envFile: { type: 'string', description: 'Optional .env file containing MODIO_ACCESS_TOKEN.' },
+        apiBase: { type: 'string', description: 'mod.io game API base URL. Defaults to Melvor production game API.' },
+        gameId: { type: 'string', default: '2869' },
+        zipPath: { type: 'string', description: 'Existing release zip. Defaults to <workspace>/releases/<mod>/<mod>-<version>.zip.' },
+        build: { type: 'boolean', default: false, description: 'Build the release zip before upload.' },
+        changelog: { type: 'string', description: 'Optional mod.io changelog text.' },
+        metadataBlob: { type: 'string', description: 'Optional mod.io metadata_blob field.' },
+        active: { type: 'boolean', description: 'Optional mod.io active flag.' },
+        fileField: { type: 'string', default: 'filedata', description: 'Multipart file field name. Defaults to mod.io filedata.' },
+        apply: { type: 'boolean', default: false, description: 'Actually upload. False returns the plan only.' },
+        confirm: { type: 'string', description: 'Must exactly match the required confirmation phrase when apply=true.' },
+        refreshModio: { type: 'boolean', default: true },
+      },
+      required: ['mod'],
     },
   },
   {
@@ -535,6 +603,317 @@ function numeric(value, fallback, min, max = Number.POSITIVE_INFINITY) {
     throw new Error(`Expected integer between ${min} and ${max}`);
   }
   return parsed;
+}
+
+
+function resolveReleaseContext(args = {}) {
+  const configuredModsRoot = args.modsRoot || process.env.MELVOR_MODS_ROOT || '';
+  const workspaceRoot = path.resolve(
+    args.workspaceRoot
+      || process.env.MELVOR_WORKSPACE_ROOT
+      || (configuredModsRoot ? path.dirname(path.resolve(configuredModsRoot)) : REPO_ROOT)
+  );
+  const envFileCandidate = args.envFile || process.env.MELVOR_MODIO_ENV_FILE || path.join(workspaceRoot, '.env');
+  const envFile = envFileCandidate ? path.resolve(envFileCandidate) : null;
+  if (envFile && fs.existsSync(envFile)) loadDotEnv(envFile);
+
+  const modsRoot = path.resolve(args.modsRoot || process.env.MELVOR_MODS_ROOT || path.join(workspaceRoot, 'mods'));
+  const mappingFile = path.resolve(
+    args.mappingFile || process.env.MELVOR_MODIO_MAPPING_FILE || path.join(workspaceRoot, 'config', 'modio-matches.json')
+  );
+  const gameId = String(args.gameId || process.env.MODIO_GAME_ID || DEFAULT_MODIO_GAME_ID);
+  const apiBase = String(args.apiBase || process.env.MODIO_GAME_API_BASE_URL || DEFAULT_MODIO_GAME_API_BASE_URL).replace(/\/+$/, '');
+
+  return {
+    workspaceRoot,
+    modsRoot,
+    mappingFile,
+    envFile: envFile && fs.existsSync(envFile) ? envFile : null,
+    gameId,
+    apiBase,
+    apiKey: process.env.MODIO_API_KEY || '',
+    accessToken: process.env.MODIO_ACCESS_TOKEN || '',
+  };
+}
+
+async function readJsonFile(filePath) {
+  return JSON.parse(await fsp.readFile(filePath, 'utf8'));
+}
+
+async function readJsonFileIfExists(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return null;
+  return await readJsonFile(filePath);
+}
+
+function mappingEntry(mapping, mod) {
+  return (mapping?.mods || []).find((entry) => entry.local_folder === mod) || null;
+}
+
+async function releaseModNames(context, mapping, args = {}) {
+  if (args.mod) return [String(args.mod)];
+  const includeReferenceOnly = args.includeReferenceOnly !== false;
+  const names = new Set();
+  for (const entry of mapping?.mods || []) {
+    if (!includeReferenceOnly && entry.automation?.role === 'reference_only') continue;
+    if (entry.local_folder) names.add(entry.local_folder);
+  }
+
+  if (names.size === 0 && fs.existsSync(context.modsRoot)) {
+    const entries = await fsp.readdir(context.modsRoot, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory() && fs.existsSync(path.join(context.modsRoot, entry.name, 'manifest.json'))) {
+        names.add(entry.name);
+      }
+    }
+  }
+
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
+function compareVersions(a, b) {
+  const left = String(a || '').split(/[+-]/)[0].split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const right = String(b || '').split(/[+-]/)[0].split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const length = Math.max(left.length, right.length, 3);
+  for (let index = 0; index < length; index += 1) {
+    const diff = (left[index] || 0) - (right[index] || 0);
+    if (diff !== 0) return diff > 0 ? 1 : -1;
+  }
+  return String(a || '').localeCompare(String(b || ''));
+}
+
+function versionRelation(localVersion, remoteVersion) {
+  if (!localVersion || !remoteVersion) return 'unknown';
+  const compared = compareVersions(localVersion, remoteVersion);
+  if (compared > 0) return 'local_ahead';
+  if (compared < 0) return 'local_behind';
+  return 'equal';
+}
+
+function gitSummary(dir) {
+  if (!fs.existsSync(path.join(dir, '.git'))) return { isRepo: false };
+  try {
+    return {
+      isRepo: true,
+      branch: run('git', ['-C', dir, 'branch', '--show-current']).trim() || null,
+      remote: runAllowNoMatches('git', ['-C', dir, 'remote', 'get-url', 'origin']).trim() || null,
+      dirty: Boolean(runAllowNoMatches('git', ['-C', dir, 'status', '--porcelain']).trim()),
+      head: run('git', ['-C', dir, 'rev-parse', '--short', 'HEAD']).trim(),
+    };
+  } catch (error) {
+    return { isRepo: true, error: error.message };
+  }
+}
+
+function modioApiUrl(context, endpoint, params = {}) {
+  const url = endpoint.startsWith('http')
+    ? new URL(endpoint)
+    : new URL(`${context.apiBase}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`);
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
+  }
+  return url;
+}
+
+function modioErrorMessage(payload) {
+  return payload?.error?.message || payload?.message || JSON.stringify(payload);
+}
+
+async function modioJson(context, endpoint, params = {}) {
+  if (!context.apiKey) throw new Error('MODIO_API_KEY is required for read-only mod.io checks. Pass envFile or set it in the MCP environment.');
+  const url = modioApiUrl(context, endpoint, { ...params, api_key: context.apiKey });
+  const response = await fetch(url, {
+    headers: {
+      accept: 'application/json',
+      'user-agent': `melvor-game-source-tools/${SERVER_VERSION}`,
+    },
+  });
+  const payload = await response.json().catch(async () => ({ message: await response.text() }));
+  if (!response.ok) throw new Error(`mod.io API failed: ${response.status} ${modioErrorMessage(payload)}`);
+  return payload;
+}
+
+function isoFromUnix(value) {
+  if (!value) return null;
+  return new Date(Number(value) * 1000).toISOString();
+}
+
+function sanitizeModioRecord(record) {
+  if (!record) return null;
+  return {
+    id: record.id,
+    name: record.name || null,
+    name_id: record.name_id || null,
+    profile_url: record.profile_url || null,
+    author: record.submitted_by?.username || record.submitted_by?.display_name || record.submitted_by?.id || null,
+    date_updated: isoFromUnix(record.date_updated),
+    modfile: record.modfile
+      ? {
+          id: record.modfile.id || null,
+          version: record.modfile.version || null,
+          filename: record.modfile.filename || null,
+          date_added: isoFromUnix(record.modfile.date_added),
+        }
+      : null,
+  };
+}
+
+async function fetchModioRecord(context, modId) {
+  if (!modId) return null;
+  return sanitizeModioRecord(await modioJson(context, `/games/${context.gameId}/mods/${modId}`));
+}
+
+async function searchModioRecords(context, query) {
+  if (!query) return [];
+  const payload = await modioJson(context, `/games/${context.gameId}/mods`, { _q: query, _limit: 10 });
+  return (payload.data || []).map(sanitizeModioRecord);
+}
+
+async function releaseSummary(context, mapping, mod, args = {}) {
+  const dir = path.join(context.modsRoot, mod);
+  const manifestPath = path.join(dir, 'manifest.json');
+  const manifest = await readJsonFileIfExists(manifestPath);
+  const entry = mappingEntry(mapping, mod);
+  const automation = entry?.automation || {};
+  const configuredModio = entry?.modio || null;
+  const summary = {
+    mod,
+    dir,
+    manifestPath,
+    manifest: manifest
+      ? {
+          name: manifest.name || null,
+          namespace: manifest.namespace || null,
+          version: manifest.version || null,
+          description: manifest.description || null,
+          setup: manifest.setup || null,
+        }
+      : null,
+    policy: {
+      role: automation.role || 'unmapped',
+      update_policy: automation.update_policy || null,
+      upload: automation.upload === true,
+      reason: automation.reason || null,
+    },
+    configuredModio: configuredModio
+      ? {
+          id: configuredModio.id || null,
+          name: configuredModio.name || null,
+          profile_url: configuredModio.profile_url || null,
+          author: configuredModio.author || null,
+          version: configuredModio.version || null,
+          date_updated: configuredModio.date_updated || null,
+        }
+      : null,
+    git: fs.existsSync(dir) ? gitSummary(dir) : { isRepo: false },
+    currentModio: null,
+    searchMatches: [],
+    versionRelation: 'unknown',
+    issues: [],
+  };
+
+  if (!manifest) summary.issues.push('missing manifest.json');
+  if (!fs.existsSync(dir)) summary.issues.push('missing mod directory');
+  if (summary.policy.role === 'reference_only') summary.issues.push('reference-only; do not release or upload');
+  if (summary.policy.role === 'owned_public_mod' && !summary.configuredModio?.id) summary.issues.push('owned public mod has no mod.io id');
+  if (summary.git.isRepo && summary.git.dirty) summary.issues.push('git working tree is dirty');
+
+  if (args.refreshModio !== false) {
+    try {
+      if (summary.configuredModio?.id) {
+        summary.currentModio = await fetchModioRecord(context, summary.configuredModio.id);
+      } else if (manifest?.name) {
+        summary.searchMatches = await searchModioRecords(context, manifest.name);
+      }
+    } catch (error) {
+      summary.issues.push(`mod.io refresh failed: ${error.message}`);
+    }
+  }
+
+  summary.versionRelation = versionRelation(summary.manifest?.version, summary.currentModio?.modfile?.version || summary.configuredModio?.version);
+  summary.releaseZip = summary.manifest?.version
+    ? path.join(context.workspaceRoot, 'releases', mod, `${mod}-${summary.manifest.version}.zip`)
+    : null;
+  summary.uploadEligible = Boolean(
+    summary.policy.role === 'owned_public_mod'
+      && summary.policy.upload
+      && summary.configuredModio?.id
+      && summary.manifest?.version
+      && summary.git.isRepo
+      && !summary.git.dirty
+  );
+  return summary;
+}
+
+function assertCanPackage(summary) {
+  if (!summary.manifest) throw new Error(`${summary.mod} is missing manifest.json.`);
+  if (summary.policy.role === 'reference_only') throw new Error(`${summary.mod} is reference_only; release automation must not publish it.`);
+  if (!summary.manifest.version) throw new Error(`${summary.mod} manifest is missing version.`);
+}
+
+function assertCanUpload(summary) {
+  assertCanPackage(summary);
+  if (summary.policy.role !== 'owned_public_mod') throw new Error(`${summary.mod} is not mapped as an owned public mod.`);
+  if (summary.policy.upload !== true) throw new Error(`${summary.mod} is not enabled for mod.io upload by policy.`);
+  if (!summary.configuredModio?.id) throw new Error(`${summary.mod} has no configured mod.io id.`);
+  if (!summary.git.isRepo) throw new Error(`${summary.mod} is not a git repository.`);
+  if (summary.git.dirty) throw new Error(`${summary.mod} has uncommitted changes.`);
+}
+
+async function packageModRelease(context, summary, args = {}) {
+  assertCanPackage(summary);
+  const outDir = path.resolve(args.outDir || path.join(context.workspaceRoot, 'releases', summary.mod));
+  const zipPath = path.join(outDir, `${summary.mod}-${summary.manifest.version}.zip`);
+  await fsp.mkdir(outDir, { recursive: true });
+  await fsp.rm(zipPath, { force: true });
+  run('zip', [
+    '-qr',
+    zipPath,
+    '.',
+    '-x',
+    '*.git/*',
+    '*.gitignore',
+    '*:Zone.Identifier',
+    '*.pdn',
+    '*.psd',
+    '*.xcf',
+    'releases/*',
+    'build/*',
+    '*.zip',
+  ], { cwd: summary.dir });
+  const stat = await fsp.stat(zipPath);
+  return { path: zipPath, bytes: stat.size };
+}
+
+async function uploadModfile(context, summary, zipPath, args = {}) {
+  if (!context.accessToken) throw new Error('MODIO_ACCESS_TOKEN is required for mod.io upload. Pass envFile or set it in the MCP environment.');
+  const fileField = args.fileField || DEFAULT_MODIO_FILE_FIELD;
+  const form = new FormData();
+  const buffer = await fsp.readFile(zipPath);
+  form.set(fileField, new Blob([buffer], { type: 'application/zip' }), path.basename(zipPath));
+  form.set('version', summary.manifest.version);
+  if (args.changelog) form.set('changelog', String(args.changelog));
+  if (args.metadataBlob) form.set('metadata_blob', String(args.metadataBlob));
+  if (args.active !== undefined) form.set('active', args.active ? '1' : '0');
+
+  const url = modioApiUrl(context, `/games/${context.gameId}/mods/${summary.configuredModio.id}/files`);
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${context.accessToken}`,
+      'user-agent': `melvor-game-source-tools/${SERVER_VERSION}`,
+    },
+    body: form,
+  });
+  const text = await response.text();
+  let payload;
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    payload = { message: text };
+  }
+  if (!response.ok) throw new Error(`mod.io upload failed: ${response.status} ${modioErrorMessage(payload)}`);
+  return sanitizeModioRecord({ ...summary.currentModio, modfile: payload }) || payload;
 }
 
 function sourceName(value) {
@@ -2159,6 +2538,86 @@ async function toolCreatorToolkitLocalMods(args = {}) {
   return textContent(output);
 }
 
+
+async function toolModReleaseStatus(args = {}) {
+  const context = resolveReleaseContext(args);
+  const mapping = await readJsonFileIfExists(context.mappingFile);
+  const mods = await releaseModNames(context, mapping, args);
+  const summaries = [];
+  for (const mod of mods) summaries.push(await releaseSummary(context, mapping, mod, args));
+  return textContent(JSON.stringify({
+    ok: true,
+    context: {
+      workspaceRoot: context.workspaceRoot,
+      modsRoot: context.modsRoot,
+      mappingFile: fs.existsSync(context.mappingFile) ? context.mappingFile : null,
+      envFile: context.envFile,
+      gameId: context.gameId,
+      apiBase: context.apiBase,
+      hasApiKey: Boolean(context.apiKey),
+      hasAccessToken: Boolean(context.accessToken),
+    },
+    mods: summaries,
+  }, null, 2));
+}
+
+async function toolModReleasePackage(args = {}) {
+  if (!args.mod) throw new Error('melvor_mod_release_package requires mod.');
+  const context = resolveReleaseContext(args);
+  const mapping = await readJsonFileIfExists(context.mappingFile);
+  const summary = await releaseSummary(context, mapping, String(args.mod), args);
+  assertCanPackage(summary);
+  const zip = args.build === false
+    ? { path: path.resolve(args.outDir || path.dirname(summary.releaseZip || ''), path.basename(summary.releaseZip || '')), bytes: fs.existsSync(summary.releaseZip || '') ? fs.statSync(summary.releaseZip).size : null }
+    : await packageModRelease(context, summary, args);
+  return textContent(JSON.stringify({ ok: true, built: args.build !== false, zip, summary }, null, 2));
+}
+
+async function toolModioUpload(args = {}) {
+  if (!args.mod) throw new Error('melvor_modio_upload requires mod.');
+  const context = resolveReleaseContext(args);
+  const mapping = await readJsonFileIfExists(context.mappingFile);
+  const summary = await releaseSummary(context, mapping, String(args.mod), args);
+  assertCanUpload(summary);
+
+  const zip = args.build === true
+    ? await packageModRelease(context, summary, args)
+    : { path: path.resolve(args.zipPath || summary.releaseZip), bytes: null };
+  if (!fs.existsSync(zip.path)) throw new Error(`Release zip does not exist: ${zip.path}. Run melvor_mod_release_package first or pass build=true.`);
+  zip.bytes = fs.statSync(zip.path).size;
+
+  const requiredConfirm = `upload ${summary.mod} ${summary.manifest.version} to mod.io ${summary.configuredModio.id}`;
+  const plan = {
+    ok: true,
+    apply: Boolean(args.apply),
+    requiredConfirm,
+    zip,
+    upload: {
+      mod: summary.mod,
+      localVersion: summary.manifest.version,
+      modioId: summary.configuredModio.id,
+      endpoint: `${context.apiBase}/games/${context.gameId}/mods/${summary.configuredModio.id}/files`,
+      currentModio: summary.currentModio,
+      versionRelation: summary.versionRelation,
+      fields: {
+        file: args.fileField || DEFAULT_MODIO_FILE_FIELD,
+        version: summary.manifest.version,
+        changelog: args.changelog ? 'provided' : null,
+        metadata_blob: args.metadataBlob ? 'provided' : null,
+        active: args.active === undefined ? null : Boolean(args.active),
+      },
+    },
+  };
+
+  if (!args.apply) return textContent(JSON.stringify(plan, null, 2));
+  if (args.confirm !== requiredConfirm) {
+    throw new Error(`Confirmation mismatch. Pass confirm exactly: ${requiredConfirm}`);
+  }
+
+  const uploaded = await uploadModfile(context, summary, zip.path, args);
+  return textContent(JSON.stringify({ ...plan, uploaded }, null, 2));
+}
+
 async function toolGameSaveTest(args = {}) {
   const commandArgs = [];
   appendModManagerArgs(commandArgs, args, 'game');
@@ -2226,6 +2685,9 @@ async function callTool(name, args) {
     if (name === 'mod_manager_fetch_sources') return await toolModManagerFetchSources(args);
     if (name === 'mod_manager_configure_mod') return await toolModManagerConfigure(args);
     if (name === 'creator_toolkit_local_mods') return await toolCreatorToolkitLocalMods(args);
+    if (name === 'melvor_mod_release_status') return await toolModReleaseStatus(args);
+    if (name === 'melvor_mod_release_package') return await toolModReleasePackage(args);
+    if (name === 'melvor_modio_upload') return await toolModioUpload(args);
     if (name === 'mod_test_browser_check') return await toolBrowserCheck(args);
     if (name === 'game_save_test') return await toolGameSaveTest(args);
     if (name === 'game_session_start') return await toolGameSessionStart(args);

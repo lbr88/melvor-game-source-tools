@@ -119,6 +119,9 @@ test('MCP tool schemas are OpenAI-compatible at the top level', async (t) => {
   const toolNames = new Set(tools.map((tool) => tool.name));
   assert.ok(toolNames.has('mod_manager_configure_mod'));
   assert.ok(toolNames.has('creator_toolkit_local_mods'));
+  assert.ok(toolNames.has('melvor_mod_release_status'));
+  assert.ok(toolNames.has('melvor_mod_release_package'));
+  assert.ok(toolNames.has('melvor_modio_upload'));
   assert.ok(toolNames.has('game_save_test'));
   assert.ok(toolNames.has('game_session_start'));
   assert.ok(toolNames.has('game_session_action'));
@@ -321,4 +324,22 @@ test('guide search returns mod-writing chunks instead of whole docs', async (t) 
   assert.equal(doc.section.anchor, result.section.anchor);
   assert.match(doc.text, /ctx\.patch/);
   assert.ok(doc.text.length < 4000);
+});
+
+
+test('release upload dry-run validates local policy before mutation', async (t) => {
+  const client = startServer(t);
+  await initialize(client);
+
+  const response = await client.request('tools/call', {
+    name: 'melvor_modio_upload',
+    arguments: {
+      mod: 'missing-mod',
+      workspaceRoot: REPO_ROOT,
+    },
+  });
+
+  assert.equal(response.error, undefined);
+  assert.equal(response.result.isError, true);
+  assert.match(response.result.content[0].text, /missing manifest|missing mod directory/i);
 });
