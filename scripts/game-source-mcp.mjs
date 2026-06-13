@@ -733,22 +733,27 @@ async function modioJson(context, endpoint, params = {}) {
 }
 
 function isoFromModioTimestamp(value) {
-  if (!value) return null;
-  if (value instanceof Date) {
-    const time = value.getTime();
-    return Number.isFinite(time) ? value.toISOString() : null;
-  }
+  try {
+    if (!value) return null;
+    if (value instanceof Date) {
+      const time = value.getTime();
+      return Number.isFinite(time) ? value.toISOString() : null;
+    }
 
-  if (typeof value === 'number' || /^[0-9]+$/.test(String(value))) {
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) return null;
-    const milliseconds = numeric > 9999999999 ? numeric : numeric * 1000;
-    const date = new Date(milliseconds);
+    if (typeof value === 'number' || /^[0-9]+$/.test(String(value))) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return null;
+      const milliseconds = numeric > 9999999999 ? numeric : numeric * 1000;
+      const date = new Date(milliseconds);
+      return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+    }
+
+    const date = new Date(String(value));
     return Number.isFinite(date.getTime()) ? date.toISOString() : null;
   }
-
-  const date = new Date(String(value));
-  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+  catch {
+    return null;
+  }
 }
 
 function sanitizeModioRecord(record) {
