@@ -125,8 +125,16 @@ test('MCP tool schemas are OpenAI-compatible at the top level', async (t) => {
   assert.ok(toolNames.has('game_save_test'));
   assert.ok(toolNames.has('game_session_start'));
   assert.ok(toolNames.has('game_session_action'));
+  assert.ok(toolNames.has('game_session_debug_probe'));
   assert.ok(toolNames.has('game_profile_start'));
   assert.ok(toolNames.has('game_profile_read'));
+  assert.ok(
+    tools.find((tool) => tool.name === 'game_session_action')?.inputSchema?.properties?.action?.enum?.includes('dismiss_modals')
+  );
+  assert.match(
+    tools.find((tool) => tool.name === 'game_session_debug_probe')?.description || '',
+    /live-session diagnostics/
+  );
   assert.match(
     tools.find((tool) => tool.name === 'melvor_modding_guides_list')?.description || '',
     /packaged Melvor modding documentation index/
@@ -209,6 +217,7 @@ test('local modding docs are readable through guide tools', async (t) => {
   assert.equal(overview.source, 'local');
   assert.match(overview.text, /packaged documentation corpus/);
   assert.match(overview.text, /local-mod-writing-patterns\.md/);
+  assert.match(overview.text, /live-debugging-patterns\.md/);
 
   const response = await client.request('tools/call', {
     name: 'melvor_modding_guides_read',
@@ -241,6 +250,21 @@ test('local modding docs are readable through guide tools', async (t) => {
   assert.equal(section.section.anchor, 'local-storage-guard');
   assert.match(section.text, /mct_i--loading-mod/);
   assert.doesNotMatch(section.text, /Linked Mod\.io Mods/);
+
+  const debugResponse = await client.request('tools/call', {
+    name: 'melvor_modding_guides_read',
+    arguments: {
+      page: 'live-debugging-patterns',
+      maxChars: 0,
+    },
+  });
+
+  assert.equal(debugResponse.error, undefined);
+  assert.equal(debugResponse.result.isError, false);
+  const debugDoc = JSON.parse(debugResponse.result.content[0].text);
+  assert.equal(debugDoc.source, 'local');
+  assert.match(debugDoc.text, /bare globals/i);
+  assert.match(debugDoc.text, /dismiss_modals/);
 });
 
 test('packaged assets JS documentation is searchable through guide tools', async (t) => {

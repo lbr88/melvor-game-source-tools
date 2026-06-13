@@ -163,7 +163,7 @@ const TOOLS = [
   {
     name: 'melvor_modding_guides_read',
     title: 'Read Melvor Modding Guide',
-    description: 'Read a packaged Melvor modding doc or official wiki guide. Packaged docs include the overview, source asset catalog, local mod-writing patterns, Creator Toolkit notes, browser sessions, and save-test notes.',
+    description: 'Read a packaged Melvor modding doc or official wiki guide. Packaged docs include the overview, source asset catalog, local mod-writing patterns, Creator Toolkit notes, browser sessions, live debugging patterns, and save-test notes.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -177,7 +177,7 @@ const TOOLS = [
   {
     name: 'melvor_modding_guides_search',
     title: 'Search Melvor Modding Guides',
-    description: 'Search packaged Melvor modding docs plus official wiki guides. Use for mod-development questions about ctx.patch, lifecycle hooks, settings, templates, Creator Toolkit local mods, offline processing, source assets, browser sessions, and save tests.',
+    description: 'Search packaged Melvor modding docs plus official wiki guides. Use for mod-development questions about ctx.patch, lifecycle hooks, settings, templates, Creator Toolkit local mods, offline processing, source assets, browser sessions, live debugging, and save tests.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -416,13 +416,14 @@ const TOOLS = [
       type: 'object',
       properties: {
         sessionId: { type: 'string', default: 'default' },
-        action: { type: 'string', enum: ['wait', 'click_selector', 'fill_selector', 'press', 'open_page', 'evaluate'] },
+        action: { type: 'string', enum: ['wait', 'click_selector', 'fill_selector', 'press', 'open_page', 'evaluate', 'dismiss_modals'] },
         selector: { type: 'string', description: 'CSS selector for click_selector, fill_selector, or press.' },
         text: { type: 'string', description: 'Text for fill_selector.' },
         key: { type: 'string', description: 'Keyboard key for press.' },
         pageId: { type: 'string', description: 'Melvor page id for open_page, for example melvorD:Woodcutting.' },
         script: { type: 'string', description: 'JavaScript expression or async function body to evaluate in the page for action=evaluate.' },
         durationMs: { type: 'integer', minimum: 0, default: 1000 },
+        maxClicks: { type: 'integer', minimum: 1, default: 3, description: 'Maximum SweetAlert confirm/close attempts for action=dismiss_modals.' },
         timeoutMs: { type: 'integer', minimum: 1000, default: 30000 },
       },
       required: ['action'],
@@ -437,6 +438,29 @@ const TOOLS = [
       properties: {
         sessionId: { type: 'string', default: 'default' },
         maxBrowserEvents: { type: 'integer', minimum: 0, default: 50 },
+      },
+    },
+  },
+  {
+    name: 'game_session_debug_probe',
+    title: 'Probe Live Game Debug State',
+    description: 'Read reusable live-session diagnostics: modal state, active game state, selected global symbols, and CSS selector samples. Use this before writing ad hoc evaluate scripts.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', default: 'default' },
+        globalNames: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Global symbol names to inspect as both bare globals and globalThis properties.',
+        },
+        selectors: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'CSS selectors to count and sample.',
+        },
+        maxItems: { type: 'integer', minimum: 0, default: 5, description: 'Maximum array/object keys or selector elements to sample. 0 means unlimited.' },
+        maxText: { type: 'integer', minimum: 0, default: 160, description: 'Maximum text/HTML characters per sample. 0 means unlimited.' },
       },
     },
   },
@@ -1278,6 +1302,7 @@ const LOCAL_GUIDE_HINTS = {
   'local-mod-writing-patterns.md': 'Practical mod implementation patterns: lifecycle hooks, ctx.patch, offline guards, templates, settings, APIs, DOM observers, and caching.',
   'creator-toolkit-local-mods.md': 'Creator Toolkit local mods: IndexedDB shape, linked mod.io behavior, load guards, .modignore, and MCP verification.',
   'live-game-sessions.md': 'Persistent browser sessions, read-only save guards, screenshots, live state reads, and profiling.',
+  'live-debugging-patterns.md': 'Live debugging patterns: rendered UI versus game data, bare globals versus globalThis, modal handling, structured console evidence, and inactive mod.io test uploads.',
   'game-save-browser-tests.md': 'One-shot save/browser regression checks and generated reports.',
 };
 
@@ -1289,6 +1314,7 @@ const GUIDE_USE_CASES = [
   { question: 'How should a mod handle offline processing?', tool: 'melvor_modding_guides_search', query: 'offlineLoopEntered loadingOfflineProgress OfflineLoadingElement' },
   { question: 'How do local Creator Toolkit mods load?', tool: 'melvor_modding_guides_read', page: 'creator-toolkit-local-mods' },
   { question: 'How do I test a mod safely in the browser?', tool: 'melvor_modding_guides_read', page: 'live-game-sessions' },
+  { question: 'How do I debug a live UI mismatch?', tool: 'melvor_modding_guides_read', page: 'live-debugging-patterns' },
 ];
 
 function isGitRepo(repoPath) {
@@ -2245,6 +2271,42 @@ async function toolGameSessionAction(args = {}) {
     }, String(args.script));
     if (durationMs > 0) await session.page.waitForTimeout(durationMs);
     result = { action: 'evaluate', value, durationMs };
+  } else if (args.action === 'dismiss_modals') {
+    const maxClicks = numeric(args.maxClicks, 3, 1, 20);
+    const dismissed = await session.page.evaluate(async ({ maxClicks }) => {
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const modals = [];
+      for (let index = 0; index < maxClicks; index += 1) {
+        const popup = document.querySelector('.swal2-popup');
+        const title = document.querySelector('.swal2-title')?.textContent?.trim() || '';
+        const text = document.querySelector('.swal2-html-container')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+        const confirm = document.querySelector('.swal2-confirm');
+        if (!popup && !confirm) break;
+
+        let clicked = false;
+        let closed = false;
+        if (confirm) {
+          confirm.click();
+          clicked = true;
+        }
+        else {
+          try {
+            const swal = globalThis.Swal || (typeof Swal !== 'undefined' ? Swal : null);
+            swal?.close?.();
+            closed = true;
+          } catch {}
+        }
+        modals.push({ title, text, clicked, closed });
+        await sleep(100);
+      }
+      return {
+        dismissed: modals.length,
+        modals,
+        stillPresent: Boolean(document.querySelector('.swal2-popup')),
+      };
+    }, { maxClicks });
+    if (durationMs > 0) await session.page.waitForTimeout(durationMs);
+    result = { action: 'dismiss_modals', ...dismissed, durationMs };
   } else {
     throw new Error(`Unsupported game session action: ${args.action}`);
   }
@@ -2257,6 +2319,177 @@ async function toolGameSessionState(args = {}) {
   const session = await getGameSession(browserSessionId(args));
   const state = await collectGameSessionState(session, args);
   return textContent(JSON.stringify({ ok: true, state }, null, 2));
+}
+
+async function toolGameSessionDebugProbe(args = {}) {
+  const session = await getGameSession(browserSessionId(args));
+  const maxItems = numeric(args.maxItems, 5, 0, 1000);
+  const maxText = numeric(args.maxText, 160, 0, 10000);
+  const defaultGlobalNames = [
+    'game',
+    'mod',
+    'changePage',
+    'isLoaded',
+    'inCharacterSelection',
+    'currentCharacter',
+    'bankTabMenu',
+    'Swal',
+    'PlayFabClientSDK',
+    'nativeManager',
+  ];
+  const defaultSelectors = [
+    '.swal2-popup',
+    '.swal2-confirm',
+    '#bank-tab-menu',
+    'bank-tab-menu',
+    'bank-options-menu',
+  ];
+  const globalNames = Array.isArray(args.globalNames) && args.globalNames.length > 0
+    ? args.globalNames.map(String)
+    : defaultGlobalNames;
+  const selectors = Array.isArray(args.selectors) && args.selectors.length > 0
+    ? args.selectors.map(String)
+    : defaultSelectors;
+
+  const debug = await session.page.evaluate(({ globalNames, selectors, maxItems, maxText }) => {
+    const limit = (items) => maxItems === 0 ? items : items.slice(0, maxItems);
+    const limitText = (text) => {
+      const value = String(text ?? '');
+      return maxText === 0 || value.length <= maxText ? value : `${value.slice(0, maxText)}...`;
+    };
+    const isIdentifier = (value) => /^[A-Za-z_$][0-9A-Za-z_$]*$/.test(value);
+    const summarizeValue = (value) => {
+      if (value === undefined) return { available: false, type: 'undefined' };
+      if (value === null) return { available: true, type: 'object', isNull: true };
+      const type = typeof value;
+      const summary = {
+        available: true,
+        type,
+        constructorName: value?.constructor?.name || null,
+      };
+      if (type === 'function') {
+        summary.name = value.name || '';
+        summary.length = value.length;
+        return summary;
+      }
+      if (type !== 'object') {
+        summary.value = type === 'string'
+          ? limitText(value)
+          : type === 'number' || type === 'boolean'
+            ? value
+            : String(value);
+        return summary;
+      }
+      if (Array.isArray(value)) {
+        summary.length = value.length;
+        summary.sample = limit(value).map((item) => {
+          if (item && typeof item === 'object') return item.id || item.name || item.constructor?.name || '[object]';
+          return item;
+        });
+        return summary;
+      }
+      if (value instanceof Map || value instanceof Set) summary.size = value.size;
+      summary.keys = limit(Object.keys(value));
+      if ('id' in value) summary.id = String(value.id);
+      if ('name' in value) summary.name = String(value.name);
+      return summary;
+    };
+    const readBareGlobal = (name) => {
+      if (!isIdentifier(name)) return { validIdentifier: false, value: undefined };
+      try {
+        return {
+          validIdentifier: true,
+          value: Function(`return typeof ${name} !== "undefined" ? ${name} : undefined`)(),
+        };
+      } catch (error) {
+        return {
+          validIdentifier: true,
+          value: undefined,
+          error: error?.message || String(error),
+        };
+      }
+    };
+    const elementSample = (element) => {
+      const style = window.getComputedStyle(element);
+      return {
+        tagName: element.tagName,
+        id: element.id || '',
+        className: typeof element.className === 'string' ? element.className : '',
+        text: limitText(element.textContent?.replace(/\s+/g, ' ').trim() || ''),
+        html: limitText(element.outerHTML || ''),
+        visible: style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || 1) !== 0,
+      };
+    };
+
+    const modal = document.querySelector('.swal2-popup');
+    const modalStyle = modal ? window.getComputedStyle(modal) : null;
+    const modalVisible = Boolean(modal && modalStyle?.display !== 'none' && modalStyle?.visibility !== 'hidden');
+    const globals = {};
+    for (const name of globalNames) {
+      const bare = readBareGlobal(name);
+      const globalThisValue = isIdentifier(name) ? globalThis[name] : undefined;
+      globals[name] = {
+        validIdentifier: bare.validIdentifier,
+        bare: summarizeValue(bare.value),
+        globalThis: summarizeValue(globalThisValue),
+        bareOnly: bare.value !== undefined && globalThisValue === undefined,
+        error: bare.error || null,
+      };
+    }
+
+    const selectorResults = selectors.map((selector) => {
+      try {
+        const matches = Array.from(document.querySelectorAll(selector));
+        return {
+          selector,
+          count: matches.length,
+          samples: limit(matches).map(elementSample),
+        };
+      } catch (error) {
+        return {
+          selector,
+          error: error?.message || String(error),
+        };
+      }
+    });
+
+    const loadedMods = typeof mod !== 'undefined' ? mod.manager?.getLoadedModList?.() || [] : [];
+    const warnings = [];
+    for (const [name, info] of Object.entries(globals)) {
+      if (info.bareOnly) warnings.push(`${name} is available as a bare global but not as globalThis.${name}.`);
+    }
+    if (modalVisible) warnings.push('A SweetAlert modal is visible and may block clicks or page interactions.');
+
+    return {
+      location: location.href,
+      title: document.title,
+      modal: modalVisible
+        ? {
+            title: document.querySelector('.swal2-title')?.textContent?.trim() || '',
+            text: document.querySelector('.swal2-html-container')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          }
+        : null,
+      game: {
+        loaded: typeof isLoaded !== 'undefined' ? Boolean(isLoaded) : false,
+        inCharacterSelection: typeof inCharacterSelection !== 'undefined' ? Boolean(inCharacterSelection) : null,
+        currentCharacter: typeof currentCharacter !== 'undefined' ? currentCharacter : null,
+        characterName: typeof game !== 'undefined' ? game.characterName || null : null,
+        activePage: typeof game !== 'undefined' ? game.activePage?.id || game.activeActionPage?.id || null : null,
+        activeAction: typeof game !== 'undefined' ? game.activeAction?.id || game.activeAction?.name || null : null,
+        enableRendering: typeof game !== 'undefined' ? game.enableRendering ?? null : null,
+      },
+      modManager: {
+        enabled: Boolean(typeof mod !== 'undefined' && mod.manager?.isEnabled?.()),
+        processing: Boolean(typeof mod !== 'undefined' && mod.manager?.isProcessing?.()),
+        loadedMods,
+      },
+      globals,
+      selectors: selectorResults,
+      warnings,
+    };
+  }, { globalNames, selectors, maxItems, maxText });
+
+  return textContent(JSON.stringify({ ok: true, sessionId: session.id, debug }, null, 2));
 }
 
 async function toolGameSessionScreenshot(args = {}) {
@@ -2712,6 +2945,7 @@ async function callTool(name, args) {
     if (name === 'game_session_start') return await toolGameSessionStart(args);
     if (name === 'game_session_action') return await toolGameSessionAction(args);
     if (name === 'game_session_state') return await toolGameSessionState(args);
+    if (name === 'game_session_debug_probe') return await toolGameSessionDebugProbe(args);
     if (name === 'game_session_screenshot') return await toolGameSessionScreenshot(args);
     if (name === 'game_session_stop') return await toolGameSessionStop(args);
     if (name === 'game_profile_start') return await toolGameProfileStart(args);

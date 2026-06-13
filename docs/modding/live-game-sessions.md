@@ -7,6 +7,7 @@ Use `game_save_test` only for one-shot regression checks. Use these tools when t
 - `game_session_start`: launches Chromium, signs in with `.env` credentials, waits for Mod Manager, optionally loads `MELVOR_TEST_CHARACTER_SLOT`, and keeps the page open.
 - `game_session_action`: runs actions against that same page. Supported actions are `wait`, `click_selector`, `fill_selector`, `press`, `open_page`, and `evaluate`.
 - `game_session_state`: reads current page/game/mod state without closing the browser.
+- `game_session_debug_probe`: reads reusable debugging facts from the live page, including modal state, common game state, requested bare/globalThis symbols, and CSS selector samples.
 - `game_session_screenshot`: writes a screenshot and JSON report while the session remains open.
 - `game_session_stop`: closes the browser only when explicitly requested.
 
@@ -30,6 +31,14 @@ Optimizer-specific state is included in session and profile reads:
 - whether Optimizer thinks it is inside the offline loop,
 - whether game rendering is currently enabled.
 
+## Debugging
+
+Use `game_session_debug_probe` before writing a custom `evaluate` script. It is useful for checking whether the page is blocked by a modal, whether a runtime symbol exists only as a bare global instead of `globalThis`, and whether expected selectors are present.
+
+`game_session_action` also supports `dismiss_modals`, which clicks SweetAlert confirm buttons or closes visible SweetAlert popups. Use it before selector-click workflows when pet unlocks, warnings, or mod.io prompts may block the page.
+
+When debugging UI behavior, compare both game state and rendered DOM. A mod can update game data correctly while the visible UI remains stale, especially when custom elements own their own render cache.
+
 Example flow:
 
 ```json
@@ -46,6 +55,16 @@ Interact:
 
 ```json
 { "sessionId": "optimizer", "action": "open_page", "pageId": "melvorD:Woodcutting", "durationMs": 2000 }
+```
+
+Probe the live UI:
+
+```json
+{
+  "sessionId": "optimizer",
+  "globalNames": ["game", "mod", "bankTabMenu"],
+  "selectors": [".swal2-popup", "#bank-tab-menu"]
+}
 ```
 
 Read current profile:

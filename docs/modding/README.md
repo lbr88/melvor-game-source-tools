@@ -31,6 +31,10 @@ Use for Creator Toolkit behaviour: local mod records, IndexedDB storage, linked 
 
 Use for interactive MCP browser work: persistent Melvor sessions, read-only save guards, screenshots, live state reads, and profiling attached to an open session.
 
+`live-debugging-patterns.md`
+
+Use for practical live debugging habits: checking rendered UI as well as game data, bare globals versus `globalThis`, modal dismissal, structured console evidence, and inactive mod.io test uploads.
+
 `game-save-browser-tests.md`
 
 Use for one-shot browser regression checks: loading a save, blocking save writes, opening pages, clicking selectors, and reading generated reports.
@@ -48,3 +52,5 @@ For "where is the mod loader?", search for `mod loader`, `built/mod.js`, or read
 For "where is a symbol or hook in source?", search for `generated source reference`, the symbol name, or read `generated-source-reference.md`.
 
 For "how do I test a local mod safely?", read `creator-toolkit-local-mods.md`, `live-game-sessions.md`, and `game-save-browser-tests.md`.
+
+For "why does this look fixed in data but not in the game?", read `live-debugging-patterns.md` and compare both the game model and rendered DOM.

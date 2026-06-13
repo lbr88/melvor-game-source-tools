@@ -58,8 +58,9 @@ Main tools:
 - `mod_manager_fetch_sources`: exports installed Mod Manager mod resources into ignored `mod-sources/`.
 - `game_save_test`: logs in, loads a configured cloud/local save slot, blocks save writes by default, and writes a screenshot/report.
 - `game_session_start`: starts a persistent, visible Melvor browser session and optionally loads the configured save slot.
-- `game_session_action`: clicks, types, waits, opens game pages, or evaluates page JavaScript in that live session.
+- `game_session_action`: clicks, types, waits, opens game pages, dismisses SweetAlert modals, or evaluates page JavaScript in that live session.
 - `game_session_state`: reads the live session state, loaded mods, Optimizer state, browser events, and blocked save writes.
+- `game_session_debug_probe`: samples reusable live debugging facts, including modal state, bare/globalThis symbols, common game state, and selector matches.
 - `game_session_screenshot`: screenshots the live session without closing it.
 - `game_session_stop`: closes the live session when testing is done.
 - `game_profile_start`: starts tracing and live performance collection on an existing game session.
