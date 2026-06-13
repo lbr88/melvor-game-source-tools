@@ -46,9 +46,10 @@ Example client config:
 
 Main tools:
 
+- `melvor_mcp_context`: returns a compact map of Melvor game internals, packaged docs, searchable topics, and recommended discovery workflow.
 - `game_source_download`: downloads web or Android-loaded source into ignored `game-source/`.
-- `game_source_beautify`: writes readable formatted copies into ignored `game-source-readable/`.
-- `game_source_search`: searches raw local source, readable source, or a git-backed source checkout.
+- `game_source_beautify`: writes opt-in readable formatted copies into ignored `game-source-readable/`; raw downloaded source is left unchanged.
+- `game_source_search`: searches raw local source by default, or a readable/git-backed source checkout when `repo` is overridden.
 - `game_source_read`: reads bounded source slices.
 - `game_source_manifest`: reads detected version metadata.
 - `melvor_modding_guides_list`: lists packaged modding docs, recommended use cases, and official wiki Mod Creation guide pages.
@@ -56,16 +57,20 @@ Main tools:
 - `melvor_modding_guides_search`: searches packaged modding docs and official wiki guide pages.
 - `mod_manager_loaded_mods`: opens Melvor with Playwright and reports installed/loaded Mod Manager mods.
 - `mod_manager_fetch_sources`: exports installed Mod Manager mod resources into ignored `mod-sources/`.
+- `mod_source_search`: searches locally fetched installed Mod Manager mod source folders under `mod-sources/`.
+- `mod_source_read`: reads bounded line slices from a locally fetched installed Mod Manager mod source file.
 - `game_save_test`: logs in, loads a configured cloud/local save slot, blocks save writes by default, and writes a screenshot/report.
 - `game_session_start`: starts a persistent, visible Melvor browser session and optionally loads the configured save slot.
 - `game_session_action`: clicks, types, waits, opens game pages, dismisses SweetAlert modals, or evaluates page JavaScript in that live session.
 - `game_session_state`: reads the live session state, loaded mods, Optimizer state, browser events, and blocked save writes.
 - `game_session_debug_probe`: samples reusable live debugging facts, including modal state, bare/globalThis symbols, common game state, and selector matches.
+- `game_session_time_skip`: triggers Melvor offline processing in a loaded live session with `game.testForOffline(hours)`, useful for testing mods that handle offline progress.
 - `game_session_screenshot`: screenshots the live session without closing it.
 - `game_session_stop`: closes the live session when testing is done.
-- `game_profile_start`: starts tracing and live performance collection on an existing game session.
-- `game_profile_read`: reads current profiling counters while the session keeps running.
-- `game_profile_stop`: stops profiling, writes a trace/report, and leaves the browser open.
+- `game_profile_start`: starts tracing, CDP CPU profiling, browser metrics, and live performance collection on an existing game session.
+- `game_profile_read`: reads current profiling counters, Chrome metric deltas, heap usage, and browser events while the session keeps running.
+- `game_profile_mark`: adds named marks to segment a live profile by scenario step.
+- `game_profile_stop`: stops profiling, writes a trace, `.cpuprofile`, browser metrics, and report while leaving the browser open.
 - `mod_test_browser_check`: verifies Playwright Chromium can launch.
 - `mod_test_smoke`: opens Melvor, optionally injects a mod script/folder, and writes an ignored report.
 - `mod_profile_runtime`: captures a Playwright trace/profile into ignored `reports/`.
@@ -94,6 +99,8 @@ npm run source:docs
 
 The CLI refresh commands install captured source into ignored `game-source/web/` and `game-source/android-loaded/`. Beautify commands write readable copies into ignored `game-source-readable/web/` and `game-source-readable/android-loaded/`.
 `source:docs` scans `game-source-readable/web/` by default, falls back to `game-source/web/`, and updates `docs/modding/generated-source-reference.md` with compact modding-relevant file/line snippets for MCP search.
+
+Keep the raw downloaded source as the ground truth. Beautified output is useful for reading and generated docs, but it can change formatting and line positions. Use `game_source_search` against raw `game-source/` when exact runtime shape matters; pass `repo` pointing at `game-source-readable/...` only when readability is more important.
 
 ## Mod Testing And Profiling
 
@@ -197,6 +204,17 @@ npm run mod-manager:fetch
 
 Fetched mod resources are written under ignored `mod-sources/`, one folder per mod. Each folder includes the mod's original files plus `mod-source.json` metadata, so the folder can be searched, edited locally, smoke-tested, or profiled with the mod testing commands.
 
+The MCP exposes the fetched installed-mod corpus directly:
+
+- `mod_source_search`: search all fetched mods, or filter by `modId`, `modName`, and path.
+- `mod_source_read`: read a specific fetched mod file after selecting one mod by `modId` or `modName`.
+
 ## Modding Guides
 
-The MCP guide tools read the official Melvor Idle wiki `Mod Creation` pages through the wiki API and packaged local notes under `docs/modding/`. Start with `melvor_modding_guides_list`: it returns a docs overview, recommended use cases, and the packaged docs index. `docs/modding/README.md` is the human-facing entry point, and the assets/js architecture catalog lives there as `game-source-assets-js.md`, so `melvor_modding_guides_search` works without depending on a separate local checkout. Use `melvor_modding_guides_read` with `format: "wikitext"` when official wiki code examples matter.
+The MCP guide tools read the official Melvor Idle wiki `Mod Creation` pages through the wiki API and packaged local notes under `docs/modding/`. Start with `melvor_mcp_context` when the question is broad or the right search terms are unknown. It returns the high-level map: how Melvor works internally, source layout, mod loader/context API, lifecycle hooks, offline processing, UI/custom elements, bank/items/equipment/combat areas, Creator Toolkit, live debugging, and safe save/release testing.
+
+Use `melvor_modding_guides_list` next: it returns the docs overview, recommended use cases, searchable topic hints, and the packaged docs index. `docs/modding/README.md` is the human-facing entry point. For "how does Melvor work?" read `game-internals-overview`; for source file layout read `game-source-assets-js`; for exact symbols read `generated-source-reference`. These packaged docs mean `melvor_modding_guides_search` works without depending on a separate local checkout. For new mod setup, search or read the official `Mod Creation/Getting Started`, `Mod Creation/Essentials`, and `Mod Creation/Creator Toolkit` pages, then use packaged `creator-toolkit-local-mods` and `local-mod-writing-patterns` for loading and implementation patterns. `local-mod-writing-patterns` is repo-authored practical guidance, not official Melvor documentation, and it does not require the user to already have local mods. Use `melvor_modding_guides_read` with `format: "wikitext"` when official wiki code examples matter.
+
+For offline-processing mod tests, start a read-only live session with a loaded save and an active action, then call `game_session_time_skip` with a small `hours` value. The tool uses the same underlying game helper that Time Skip relies on, `game.testForOffline(hours)`, and reports offline loop entry/exit, before/after state, modals, and blocked save writes.
+
+For performance analysis, use `game_profile_start` on an existing live session. By default it enables Playwright tracing, Chrome DevTools Protocol CPU sampling, Chrome performance metrics, heap usage reads, long-task collection, and optional targeted instrumentation such as `instrumentQuerySelectorAll`. Use `game_profile_mark` before and after expensive steps, then `game_profile_stop` to write `trace.zip`, `cpu-profile.cpuprofile`, `browser-metrics.json`, and `report.json` under ignored `reports/`.

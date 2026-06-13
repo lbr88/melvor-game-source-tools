@@ -1,0 +1,19 @@
+{
+  "id": 123456,
+  "name": "Test Optimizer",
+  "namespace": "test_optimizer",
+  "version": "0.0.1",
+  "author": "Fixture",
+  "loaded": true,
+  "inActiveProfile": true,
+  "setup": "setup.mjs",
+  "load": [],
+  "dependencies": [],
+  "files": [
+    {
+      "path": "setup.mjs",
+      "type": "text/javascript",
+      "bytes": 268
+    }
+  ]
+}

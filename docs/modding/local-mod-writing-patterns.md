@@ -2,6 +2,10 @@
 
 These behaviours were distilled from working Melvor mods and written here as standalone guidance for future mod authors and AI agents. The original local mod folders are not required to use this document.
 
+## Provenance
+
+This is local repository guidance, not official Melvor Idle documentation. It is based on observed working mods and is meant as practical patterns and cautions. Verify exact APIs against the official wiki docs, packaged source reference, or live game source when behavior matters.
+
 ## Lifecycle Placement
 
 The local mods use three common timing bands:

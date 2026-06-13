@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 const SERVER_PATH = path.join(REPO_ROOT, 'scripts/game-source-mcp.mjs');
+const MOD_SOURCES_FIXTURE = path.join(REPO_ROOT, 'tests/fixtures/mod-sources');
 const FORBIDDEN_TOP_LEVEL_SCHEMA_KEYS = ['oneOf', 'anyOf', 'allOf', 'enum', 'not'];
 
 function hasOwn(object, key) {
@@ -104,6 +105,8 @@ async function initialize(client) {
 
   assert.equal(response.error, undefined);
   assert.equal(response.result.serverInfo.name, 'melvor-game-source-tools');
+  assert.match(response.result.instructions, /melvor_mcp_context/);
+  assert.match(response.result.instructions, /mod_source_search/);
 }
 
 test('MCP tool schemas are OpenAI-compatible at the top level', async (t) => {
@@ -117,6 +120,7 @@ test('MCP tool schemas are OpenAI-compatible at the top level', async (t) => {
   assert.ok(Array.isArray(tools));
   assert.ok(tools.length > 0);
   const toolNames = new Set(tools.map((tool) => tool.name));
+  assert.ok(toolNames.has('melvor_mcp_context'));
   assert.ok(toolNames.has('mod_manager_configure_mod'));
   assert.ok(toolNames.has('creator_toolkit_local_mods'));
   assert.ok(toolNames.has('melvor_mod_release_status'));
@@ -126,8 +130,13 @@ test('MCP tool schemas are OpenAI-compatible at the top level', async (t) => {
   assert.ok(toolNames.has('game_session_start'));
   assert.ok(toolNames.has('game_session_action'));
   assert.ok(toolNames.has('game_session_debug_probe'));
+  assert.ok(toolNames.has('game_session_time_skip'));
+  assert.ok(toolNames.has('mod_source_search'));
+  assert.ok(toolNames.has('mod_source_read'));
   assert.ok(toolNames.has('game_profile_start'));
   assert.ok(toolNames.has('game_profile_read'));
+  assert.ok(toolNames.has('game_profile_mark'));
+  assert.ok(toolNames.has('game_profile_stop'));
   assert.ok(
     tools.find((tool) => tool.name === 'game_session_action')?.inputSchema?.properties?.action?.enum?.includes('dismiss_modals')
   );
@@ -136,12 +145,31 @@ test('MCP tool schemas are OpenAI-compatible at the top level', async (t) => {
     /live-session diagnostics/
   );
   assert.match(
+    tools.find((tool) => tool.name === 'game_session_time_skip')?.description || '',
+    /game\.testForOffline/
+  );
+  assert.match(
+    tools.find((tool) => tool.name === 'game_profile_start')?.description || '',
+    /CDP browser CPU profiling/
+  );
+  assert.equal(
+    tools.find((tool) => tool.name === 'game_profile_start')?.inputSchema?.properties?.cpuProfile?.default,
+    true
+  );
+  assert.ok(
+    tools.find((tool) => tool.name === 'game_profile_stop')?.inputSchema?.properties?.maxCpuFunctions
+  );
+  assert.match(
     tools.find((tool) => tool.name === 'melvor_modding_guides_list')?.description || '',
     /packaged Melvor modding documentation index/
   );
   assert.match(
     tools.find((tool) => tool.name === 'melvor_modding_guides_search')?.description || '',
-    /ctx\.patch/
+    /bank\/UI rendering/
+  );
+  assert.match(
+    tools.find((tool) => tool.name === 'melvor_mcp_context')?.description || '',
+    /game internals/
   );
 
   const failures = [];
@@ -216,8 +244,28 @@ test('local modding docs are readable through guide tools', async (t) => {
   const overview = JSON.parse(overviewResponse.result.content[0].text);
   assert.equal(overview.source, 'local');
   assert.match(overview.text, /packaged documentation corpus/);
+  assert.match(overview.text, /melvor_mcp_context/);
+  assert.match(overview.text, /game-internals-overview\.md/);
   assert.match(overview.text, /local-mod-writing-patterns\.md/);
   assert.match(overview.text, /live-debugging-patterns\.md/);
+
+  const internalsResponse = await client.request('tools/call', {
+    name: 'melvor_modding_guides_read',
+    arguments: {
+      page: 'game-internals-overview',
+      maxChars: 0,
+    },
+  });
+
+  assert.equal(internalsResponse.error, undefined);
+  assert.equal(internalsResponse.result.isError, false);
+  const internals = JSON.parse(internalsResponse.result.content[0].text);
+  assert.equal(internals.source, 'local');
+  assert.match(internals.text, /Mental Model/);
+  assert.match(internals.text, /Game Loop And Offline Processing/);
+  assert.match(internals.text, /game_session_time_skip/);
+  assert.match(internals.text, /cpu-profile\.cpuprofile/);
+  assert.match(internals.text, /Items, Bank, Equipment, And Shop/);
 
   const response = await client.request('tools/call', {
     name: 'melvor_modding_guides_read',
@@ -265,6 +313,84 @@ test('local modding docs are readable through guide tools', async (t) => {
   assert.equal(debugDoc.source, 'local');
   assert.match(debugDoc.text, /bare globals/i);
   assert.match(debugDoc.text, /dismiss_modals/);
+});
+
+test('MCP context exposes a broad discovery map', async (t) => {
+  const client = startServer(t);
+  await initialize(client);
+
+  const contextResponse = await client.request('tools/call', {
+    name: 'melvor_mcp_context',
+    arguments: {},
+  });
+
+  assert.equal(contextResponse.error, undefined);
+  assert.equal(contextResponse.result.isError, false);
+  const context = JSON.parse(contextResponse.result.content[0].text);
+  assert.match(context.purpose, /Melvor Game Source MCP/);
+  assert.match(context.purpose, /works internally/);
+  assert.ok(context.startHere.find((entry) => entry.tool === 'melvor_modding_guides_search'));
+  assert.ok(context.startHere.find((entry) => entry.tool === 'mod_source_search'));
+  assert.ok(context.gameInternals.find((entry) => entry.docs.includes('game-internals-overview')));
+  assert.ok(context.gameInternals.find((entry) => /Items, bank, equipment, and combat/.test(entry.area)));
+  assert.ok(context.searchStarters.includes('mod_manager_fetch_sources mod_source_search installed mods'));
+  assert.ok(context.searchStarters.includes('game.testForOffline Time Skip offline processing'));
+  assert.ok(context.searchStarters.includes('CDP CPU profile browser metrics long tasks heap trace'));
+  assert.ok(context.searchStarters.includes('how Melvor works boot registries game loop render queue'));
+
+  const listResponse = await client.request('tools/call', {
+    name: 'melvor_modding_guides_list',
+    arguments: {},
+  });
+
+  assert.equal(listResponse.error, undefined);
+  assert.equal(listResponse.result.isError, false);
+  const list = JSON.parse(listResponse.result.content[0].text);
+  assert.equal(list.overview.contextTool.tool, 'melvor_mcp_context');
+  assert.ok(list.overview.gameInternals.find((entry) => /Mod loader/.test(entry.area)));
+  assert.ok(list.packagedDocs.find((entry) => entry.page === 'game-internals-overview'));
+  assert.ok(list.overview.searchStarters.includes('Bank bankTabMenu bank items tabs'));
+});
+
+test('fetched installed mod sources are searchable and readable', async (t) => {
+  const client = startServer(t);
+  await initialize(client);
+
+  const searchResponse = await client.request('tools/call', {
+    name: 'mod_source_search',
+    arguments: {
+      query: 'bankTabMenu',
+      outDir: MOD_SOURCES_FIXTURE,
+      modName: 'optimizer',
+      maxResults: 5,
+    },
+  });
+
+  assert.equal(searchResponse.error, undefined);
+  assert.equal(searchResponse.result.isError, false);
+  const search = JSON.parse(searchResponse.result.content[0].text);
+  assert.equal(search.searchedMods.length, 1);
+  assert.equal(search.searchedMods[0].id, 123456);
+  assert.equal(search.results.length, 1);
+  assert.equal(search.results[0].path, 'setup.mjs');
+  assert.match(search.results[0].text, /bankTabMenu/);
+
+  const readResponse = await client.request('tools/call', {
+    name: 'mod_source_read',
+    arguments: {
+      modId: 123456,
+      path: 'setup.mjs',
+      outDir: MOD_SOURCES_FIXTURE,
+      maxLines: 20,
+    },
+  });
+
+  assert.equal(readResponse.error, undefined);
+  assert.equal(readResponse.result.isError, false);
+  const read = JSON.parse(readResponse.result.content[0].text);
+  assert.equal(read.mod.name, 'Test Optimizer');
+  assert.match(read.text, /ctx\.patch/);
+  assert.match(read.text, /bankTabMenu/);
 });
 
 test('packaged assets JS documentation is searchable through guide tools', async (t) => {

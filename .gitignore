@@ -6,6 +6,8 @@ snapshots/
 game-source/
 game-source-readable/
 mod-sources/
+!tests/fixtures/mod-sources/
+!tests/fixtures/mod-sources/**
 mods/
 reports/
 playwright-report/

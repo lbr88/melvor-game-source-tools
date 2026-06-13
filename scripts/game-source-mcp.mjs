@@ -59,9 +59,18 @@ const PRESETS = [
 
 const TOOLS = [
   {
+    name: 'melvor_mcp_context',
+    title: 'Melvor MCP Context',
+    description: 'Start here for a compact map of Melvor game internals, packaged docs, searchable topics, and which MCP tools to use for modding work.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
     name: 'game_source_search',
     title: 'Search Melvor Game Source',
-    description: 'Search an ignored local source store or an optional external git-backed Melvor game-source checkout.',
+    description: 'Search an ignored local game-source store or an optional external/readable game-source checkout. Raw downloaded source remains the default; pass repo=game-source-readable/... when searching beautified output.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -139,7 +148,7 @@ const TOOLS = [
   {
     name: 'game_source_beautify',
     title: 'Beautify Game Source',
-    description: 'Create a readable copy of raw fetched source under ignored game-source-readable/. Raw fetched source is left unchanged.',
+    description: 'Create an opt-in readable copy of raw fetched source under ignored game-source-readable/. Raw fetched source is left unchanged and remains the ground-truth search target.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -154,7 +163,7 @@ const TOOLS = [
   {
     name: 'melvor_modding_guides_list',
     title: 'List Melvor Modding Guides',
-    description: 'Discover the packaged Melvor modding documentation index and official wiki guide pages. Use this first when a client needs to know what mod-development docs are available.',
+    description: 'Discover the packaged Melvor modding documentation index, searchable game-internals topics, recommended queries, and official wiki guide pages.',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -177,7 +186,7 @@ const TOOLS = [
   {
     name: 'melvor_modding_guides_search',
     title: 'Search Melvor Modding Guides',
-    description: 'Search packaged Melvor modding docs plus official wiki guides. Use for mod-development questions about ctx.patch, lifecycle hooks, settings, templates, Creator Toolkit local mods, offline processing, source assets, browser sessions, live debugging, and save tests.',
+    description: 'Search packaged Melvor modding docs plus official wiki guides. Use for game internals and mod-development questions about source architecture, mod loader, ctx.patch, lifecycle hooks, bank/UI rendering, combat/equipment, items, settings, templates, Creator Toolkit local mods, offline processing, browser sessions, live debugging, and save tests.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -229,6 +238,43 @@ const TOOLS = [
         reportDir: { type: 'string', description: 'Output directory for screenshots and JSON reports. Defaults to ignored reports/.' },
         storageState: { type: 'string', description: 'Optional Playwright storage state file to reuse/save login.' },
       },
+    },
+  },
+  {
+    name: 'mod_source_search',
+    title: 'Search Fetched Mod Sources',
+    description: 'Search locally fetched installed Mod Manager mod source folders under ignored mod-sources/. Run mod_manager_fetch_sources first to refresh the local installed-mod corpus.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Regex or literal search pattern.' },
+        regex: { type: 'boolean', default: false },
+        ignoreCase: { type: 'boolean', default: true },
+        modId: { type: 'integer', minimum: 1, description: 'Optional installed mod.io id filter.' },
+        modName: { type: 'string', description: 'Optional case-insensitive substring filter for fetched mod folder or metadata name.' },
+        path: { type: 'string', default: '.', description: 'Optional path inside each selected mod folder.' },
+        maxResults: { type: 'integer', minimum: 1, default: 100 },
+        context: { type: 'integer', minimum: 0, default: 0 },
+        outDir: { type: 'string', description: 'Fetched mod source directory. Defaults to ignored mod-sources/.' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'mod_source_read',
+    title: 'Read Fetched Mod Source File',
+    description: 'Read a bounded line slice from a locally fetched installed Mod Manager mod source folder.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        modId: { type: 'integer', minimum: 1, description: 'Installed mod.io id of the fetched mod.' },
+        modName: { type: 'string', description: 'Case-insensitive substring filter for fetched mod folder or metadata name.' },
+        path: { type: 'string', description: 'File path inside the selected fetched mod folder.' },
+        startLine: { type: 'integer', minimum: 1, default: 1 },
+        maxLines: { type: 'integer', minimum: 1, maximum: 1000, default: 200 },
+        outDir: { type: 'string', description: 'Fetched mod source directory. Defaults to ignored mod-sources/.' },
+      },
+      required: ['path'],
     },
   },
   {
@@ -465,6 +511,24 @@ const TOOLS = [
     },
   },
   {
+    name: 'game_session_time_skip',
+    title: 'Trigger Offline Processing In Live Session',
+    description: 'Simulate offline time in an existing Melvor browser session using the game.testForOffline(hours) hook used by Time Skip-style testing. Use with readOnly sessions to exercise offline-processing mods without persisting saves.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', default: 'default' },
+        hours: { type: 'number', minimum: 0, default: 1, description: 'Offline time to simulate in hours. Fractions are allowed, e.g. 0.25 for 15 minutes.' },
+        maxHours: { type: 'number', minimum: 0, default: 24, description: 'Safety cap for hours. Increase explicitly for longer offline simulations.' },
+        waitForExit: { type: 'boolean', default: true, description: 'Wait for offlineLoopExited before returning, or return after triggering offline processing.' },
+        requireActiveAction: { type: 'boolean', default: true, description: 'Fail if no skill/combat action is active. This matches the useful Time Skip test case.' },
+        allowCombatWithoutOfflineSetting: { type: 'boolean', default: false, description: 'Allow combat/thieving skips when offline combat is disabled. Defaults to false because the game may stop those actions.' },
+        dismissModals: { type: 'boolean', default: false, description: 'Click the SweetAlert confirm button after offline processing completes if a result modal is open.' },
+        timeoutMs: { type: 'integer', minimum: 1000, default: 120000 },
+      },
+    },
+  },
+  {
     name: 'game_session_screenshot',
     title: 'Screenshot Persistent Game Session',
     description: 'Capture a screenshot/report for a live Melvor browser session without closing it.',
@@ -491,13 +555,16 @@ const TOOLS = [
   {
     name: 'game_profile_start',
     title: 'Start Live Game Profiling',
-    description: 'Start Playwright tracing and in-page performance collection on an existing persistent Melvor game session.',
+    description: 'Start Playwright tracing, CDP browser CPU profiling, Chrome performance metrics, and in-page performance collection on an existing persistent Melvor game session.',
     inputSchema: {
       type: 'object',
       properties: {
         sessionId: { type: 'string', default: 'default' },
         label: { type: 'string', default: 'profile' },
         trace: { type: 'boolean', default: true },
+        cpuProfile: { type: 'boolean', default: true, description: 'Capture a Chrome DevTools Protocol JavaScript CPU profile until game_profile_stop.' },
+        browserMetrics: { type: 'boolean', default: true, description: 'Capture Chrome Performance.getMetrics counters and heap usage at start/read/stop.' },
+        samplingIntervalMicros: { type: 'integer', minimum: 100, default: 1000, description: 'CDP CPU profiler sampling interval in microseconds.' },
         screenshots: { type: 'boolean', default: true },
         snapshots: { type: 'boolean', default: true },
         sources: { type: 'boolean', default: true },
@@ -508,7 +575,7 @@ const TOOLS = [
   {
     name: 'game_profile_read',
     title: 'Read Live Game Profiling Data',
-    description: 'Read current performance counters, long tasks, Optimizer state, and browser events from an active or recently stopped profile.',
+    description: 'Read current in-page counters, Chrome performance metric deltas, heap usage, long tasks, Optimizer state, and browser events from an active or recently stopped profile.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -519,9 +586,22 @@ const TOOLS = [
     },
   },
   {
+    name: 'game_profile_mark',
+    title: 'Mark Live Game Profile',
+    description: 'Add a named performance mark to an active live game profile so browser traces and profile reports can be segmented by scenario step.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', default: 'default' },
+        label: { type: 'string', description: 'Short marker label, for example before-sort or after-offline-loop.' },
+        detail: { type: 'string', description: 'Optional short context string to store in the profile report.' },
+      },
+    },
+  },
+  {
     name: 'game_profile_stop',
     title: 'Stop Live Game Profiling',
-    description: 'Stop profiling on an existing persistent game session, write a trace artifact when enabled, and keep the browser open.',
+    description: 'Stop profiling on an existing persistent game session, write trace/report artifacts plus a .cpuprofile when enabled, and keep the browser open.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -529,6 +609,7 @@ const TOOLS = [
         reportDir: { type: 'string', description: 'Output directory for trace/report artifacts. Defaults to ignored reports/.' },
         maxLongTasks: { type: 'integer', minimum: 0, default: 50 },
         maxBrowserEvents: { type: 'integer', minimum: 0, default: 50 },
+        maxCpuFunctions: { type: 'integer', minimum: 0, default: 25, description: 'Number of top self-time functions to include in the CPU profile summary. 0 means all.' },
       },
     },
   },
@@ -625,6 +706,14 @@ function numeric(value, fallback, min, max = Number.POSITIVE_INFINITY) {
   const parsed = Number.parseInt(value ?? fallback, 10);
   if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
     throw new Error(`Expected integer between ${min} and ${max}`);
+  }
+  return parsed;
+}
+
+function numericFloat(value, fallback, min, max = Number.POSITIVE_INFINITY) {
+  const parsed = Number(value ?? fallback);
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+    throw new Error(`Expected number between ${min} and ${max}`);
   }
   return parsed;
 }
@@ -1297,9 +1386,10 @@ function findLocalGuideChunk(doc, section) {
 
 const LOCAL_GUIDE_HINTS = {
   'README.md': 'Start here. Overview of packaged docs, common questions, and which guide to read first.',
+  'game-internals-overview.md': 'Conceptual map of how the Melvor client works: boot/load flow, registries, game loop, offline processing, skills, combat, bank/items/equipment, UI rendering, saves, and modding surfaces.',
   'game-source-assets-js.md': 'Assets/js architecture catalog: bundled files, built modules, mod loader location, and runtime libraries.',
   'generated-source-reference.md': 'Generated source reference: extracted modding-relevant classes, custom elements, lifecycle hooks, patching, offline processing, and file/line snippets.',
-  'local-mod-writing-patterns.md': 'Practical mod implementation patterns: lifecycle hooks, ctx.patch, offline guards, templates, settings, APIs, DOM observers, and caching.',
+  'local-mod-writing-patterns.md': 'Repository-authored practical mod implementation patterns: lifecycle hooks, ctx.patch, offline guards, templates, settings, APIs, DOM observers, and caching. Standalone guidance, not official docs.',
   'creator-toolkit-local-mods.md': 'Creator Toolkit local mods: IndexedDB shape, linked mod.io behavior, load guards, .modignore, and MCP verification.',
   'live-game-sessions.md': 'Persistent browser sessions, read-only save guards, screenshots, live state reads, and profiling.',
   'live-debugging-patterns.md': 'Live debugging patterns: rendered UI versus game data, bare globals versus globalThis, modal handling, structured console evidence, and inactive mod.io test uploads.',
@@ -1308,14 +1398,141 @@ const LOCAL_GUIDE_HINTS = {
 
 const GUIDE_USE_CASES = [
   { question: 'What docs are available?', tool: 'melvor_modding_guides_list', page: 'README' },
+  { question: 'What does this MCP know and where should I start?', tool: 'melvor_mcp_context' },
+  { question: 'How does Melvor Idle work internally?', tool: 'melvor_modding_guides_read', page: 'game-internals-overview' },
+  { question: 'How do I set up a new Melvor mod?', tool: 'melvor_modding_guides_search', query: 'Getting Started Essentials Creator Toolkit manifest setup.mjs templates' },
   { question: 'How should a Melvor mod patch game behavior?', tool: 'melvor_modding_guides_search', query: 'ctx.patch before after replace' },
   { question: 'Where is a modding API symbol in source?', tool: 'melvor_modding_guides_search', query: 'generated source reference patching lifecycle offline custom elements' },
   { question: 'Which lifecycle hook should a mod use?', tool: 'melvor_modding_guides_search', query: 'onCharacterLoaded onInterfaceReady' },
   { question: 'How should a mod handle offline processing?', tool: 'melvor_modding_guides_search', query: 'offlineLoopEntered loadingOfflineProgress OfflineLoadingElement' },
+  { question: 'How can I trigger offline processing in a live test session?', tool: 'game_session_time_skip', hours: 1 },
+  { question: 'How do I profile browser performance in a live session?', tool: 'game_profile_start', query: 'CDP CPU profile browser metrics long tasks heap trace' },
   { question: 'How do local Creator Toolkit mods load?', tool: 'melvor_modding_guides_read', page: 'creator-toolkit-local-mods' },
   { question: 'How do I test a mod safely in the browser?', tool: 'melvor_modding_guides_read', page: 'live-game-sessions' },
   { question: 'How do I debug a live UI mismatch?', tool: 'melvor_modding_guides_read', page: 'live-debugging-patterns' },
 ];
+
+const MCP_CONTEXT = {
+  purpose: 'Melvor Game Source MCP provides a compact map of how Melvor Idle works internally, modding knowledge, searchable packaged docs, official wiki guides, local game-source search, live browser sessions, and safe release/mod.io helpers.',
+  startHere: [
+    {
+      tool: 'melvor_mcp_context',
+      use: 'Read the high-level map when you do not yet know the right file, symbol, or search term.',
+    },
+    {
+      tool: 'melvor_modding_guides_search',
+      use: 'Search packaged docs first for concepts and known patterns before reading raw game source.',
+    },
+    {
+      tool: 'game_source_search',
+      use: 'Search local raw or readable client source when docs do not answer the symbol-level question.',
+    },
+    {
+      tool: 'mod_source_search',
+      use: 'Search locally fetched installed Mod Manager mod sources after running mod_manager_fetch_sources.',
+    },
+    {
+      tool: 'game_session_start',
+      use: 'Start a live browser session when rendered behavior, globals, mod conflicts, or save-dependent state must be verified.',
+    },
+    {
+      tool: 'game_session_time_skip',
+      use: 'Trigger Melvor offline processing in a loaded read-only live session using game.testForOffline(hours).',
+    },
+    {
+      tool: 'game_profile_start',
+      use: 'Profile runtime performance in a live session with Playwright tracing, CDP CPU samples, Chrome metrics, heap usage, long tasks, and optional scenario marks.',
+    },
+  ],
+  gameInternals: [
+    {
+      area: 'Boot, source layout, and runtime libraries',
+      knowsAbout: ['assets/js bundles', 'built/ modules', 'web versus Android-loaded source stores', 'raw source as ground truth', 'opt-in readable copies under game-source-readable/', 'Pixi/jQuery/Dexie/runtime libraries'],
+      docs: ['game-internals-overview', 'game-source-assets-js'],
+      searches: ['how Melvor works boot load flow', 'source architecture built modules', 'runtime libraries assets/js', 'web android-loaded source', 'game_source_beautify readable source raw unchanged'],
+    },
+    {
+      area: 'New mod setup',
+      knowsAbout: ['official getting-started flow', 'manifest.json', 'setup.mjs', 'loadable templates', 'Creator Toolkit local mods', 'repo-authored packaged implementation patterns that do not require any local mod folders', 'local storage and settings patterns'],
+      docs: ['Mod Creation/Getting Started', 'Mod Creation/Essentials', 'Mod Creation/Creator Toolkit', 'creator-toolkit-local-mods', 'local-mod-writing-patterns'],
+      searches: ['Getting Started Essentials Creator Toolkit manifest setup.mjs templates', 'settings.section characterStorage accountStorage ctx.api', 'local mod writing lifecycle setup'],
+    },
+    {
+      area: 'Mod loader and context API',
+      knowsAbout: ['mod loading flow', 'ModContext', 'ctx.patch', 'before/after/replace patching', 'settings and storage helpers'],
+      docs: ['generated-source-reference', 'local-mod-writing-patterns', 'Mod Creation/Mod Context API Reference'],
+      searches: ['mod loader context API', 'ctx.patch before after replace', 'settings storage API'],
+    },
+    {
+      area: 'Lifecycle and offline processing',
+      knowsAbout: ['onCharacterLoaded', 'onInterfaceReady', 'offlineLoopEntered', 'offlineLoopExited', 'loadingOfflineProgress', 'controlled offline simulation with game_session_time_skip'],
+      docs: ['game-internals-overview', 'generated-source-reference', 'local-mod-writing-patterns'],
+      searches: ['onCharacterLoaded onInterfaceReady', 'offlineLoopEntered offlineLoopExited', 'loadingOfflineProgress OfflineLoadingElement', 'game.testForOffline Time Skip offline processing'],
+    },
+    {
+      area: 'UI, rendering, and custom elements',
+      knowsAbout: ['custom elements', 'menus', 'render methods', 'DOM observers', 'modal handling', 'rendered DOM versus game model checks', 'browser profiling with trace.zip and .cpuprofile artifacts'],
+      docs: ['game-internals-overview', 'generated-source-reference', 'live-debugging-patterns', 'live-game-sessions'],
+      searches: ['custom elements rendering menus', 'rendered DOM game data mismatch', 'dismiss_modals modal state', 'CDP CPU profile browser metrics long tasks heap trace'],
+    },
+    {
+      area: 'Items, bank, equipment, and combat',
+      knowsAbout: ['item/equipment model lookups', 'bank UI and tab behavior', 'equipment sets', 'combat-style and stat comparisons', 'source lookups for item-related classes'],
+      docs: ['game-internals-overview', 'generated-source-reference', 'game-source-assets-js', 'live-debugging-patterns'],
+      searches: ['Bank bankTabMenu bank items tabs', 'EquipmentItem equipment sets combat stats', 'items inventory bank render'],
+    },
+    {
+      area: 'Saves, cloud, local testing, and Mod Manager',
+      knowsAbout: ['read-only browser save guards', 'local/cloud save loading', 'Creator Toolkit local mods', 'optional fetching and searching of installed Mod Manager mod resources', 'mod.io active/inactive release safety'],
+      docs: ['creator-toolkit-local-mods', 'game-save-browser-tests', 'live-game-sessions'],
+      searches: ['Creator Toolkit IndexedDB local mods', 'mod_manager_fetch_sources mod_source_search', 'read-only save guards game_save_test', 'inactive mod.io upload'],
+    },
+  ],
+  packagedDocs: Object.entries(LOCAL_GUIDE_HINTS).map(([file, summary]) => ({
+    page: file.replace(/\.md$/i, ''),
+    file,
+    summary,
+  })),
+  searchStarters: [
+    'ctx.patch before after replace',
+    'how Melvor works boot registries game loop render queue',
+    'Getting Started Essentials Creator Toolkit manifest setup.mjs templates',
+    'onCharacterLoaded onInterfaceReady',
+    'offlineLoopEntered offlineLoopExited loadingOfflineProgress',
+    'game.testForOffline Time Skip offline processing',
+    'CDP CPU profile browser metrics long tasks heap trace',
+    'custom elements rendering menus',
+    'Bank bankTabMenu bank items tabs',
+    'EquipmentItem equipment sets combat stats',
+    'Creator Toolkit IndexedDB local mods',
+    'mod_manager_fetch_sources mod_source_search installed mods',
+    'read-only save guards game_session_start game_save_test',
+    'bare globals globalThis structured console evidence',
+  ],
+  workflow: [
+    'Use melvor_mcp_context or melvor_modding_guides_list to learn the map.',
+    'Read game-internals-overview when the question is about how Melvor works rather than one exact symbol.',
+    'Use melvor_modding_guides_search for concept-level answers and known patterns.',
+    'Use melvor_modding_guides_read on the returned page/section for detail.',
+    'Use packaged local-mod-writing-patterns even on a fresh machine with no local mods; it is standalone guidance distilled into the repo.',
+    'Use game_source_download for raw local source, game_source_beautify only when a readable copy is needed, and game_source_search/read for exact source symbols and implementation checks.',
+    'Use mod_manager_fetch_sources, then mod_source_search/read, when comparing against installed mods.',
+    'Use game_session_time_skip in a loaded read-only live session to exercise offline processing without waiting in real time.',
+    'Use game_profile_start/read/mark/stop to collect browser performance traces, CPU samples, Chrome metric deltas, heap usage, long tasks, and scenario marks.',
+    'Use live game session tools when the question depends on runtime state, rendered UI, mod interactions, or browser globals.',
+  ],
+};
+
+const MCP_SERVER_INSTRUCTIONS = [
+  'This server helps with Melvor Idle modding by combining packaged docs, official wiki guide access, local game-source search, live browser diagnostics, and safe release helpers.',
+  'When the user asks a broad Melvor modding question and you do not know the right symbol yet, call melvor_mcp_context first, then melvor_modding_guides_search.',
+  'Use packaged docs and official wiki guide access for how Melvor works internally, new mod setup, source layout, mod loader/context API, lifecycle hooks, offline processing, UI/custom elements, bank/items/equipment/combat topics, Creator Toolkit local mods, live debugging, and safe save/release testing.',
+  'Use game_source_download for raw local game source. Use game_source_beautify only when a readable copy is needed; it must not replace raw source as ground truth.',
+  'Use mod_manager_fetch_sources to export installed Mod Manager mods locally, then mod_source_search/read to compare against those downloaded mod sources.',
+  'Use game_session_time_skip in read-only live sessions to exercise offline-processing behavior through game.testForOffline(hours).',
+  'Use game_profile_start/read/mark/stop in live sessions when performance needs structured browser evidence such as CDP CPU profiles, Chrome metrics, heap usage, long tasks, and Playwright traces.',
+  'For exact implementation details, search/read local game source. For rendered behavior or mod conflicts, start a read-only game session and gather structured evidence.',
+].join(' ');
 
 function isGitRepo(repoPath) {
   const result = spawnSync('git', ['-C', repoPath, 'rev-parse', '--show-toplevel'], {
@@ -1507,6 +1724,10 @@ async function toolBeautify(args = {}) {
   return textContent(output);
 }
 
+async function toolMcpContext() {
+  return textContent(JSON.stringify(MCP_CONTEXT, null, 2));
+}
+
 async function toolGuidesList() {
   const [pages, localDocs] = await Promise.all([fetchGuidePages(), localGuideDocs()]);
   const packagedDocs = localDocs.map((doc) => ({
@@ -1527,10 +1748,16 @@ async function toolGuidesList() {
   return textContent(JSON.stringify({
     overview: {
       description: 'Packaged Melvor modding docs are available under docs/modding and are searchable without any separate local game-source checkout.',
+      contextTool: {
+        tool: 'melvor_mcp_context',
+        description: 'Use this zero-argument tool for a compact map of game internals, searchable topics, and the recommended discovery workflow.',
+      },
       startHere: {
         title: 'Local/Melvor Modding Docs Overview',
         page: 'README',
       },
+      gameInternals: MCP_CONTEXT.gameInternals,
+      searchStarters: MCP_CONTEXT.searchStarters,
       useCases: GUIDE_USE_CASES,
     },
     packagedDocs,
@@ -1664,6 +1891,210 @@ async function toolGuidesSearch(args = {}) {
   }, null, 2));
 }
 
+function resolveModSourcesDir(outDir) {
+  return path.resolve(outDir || DEFAULT_MOD_SOURCES_DIR);
+}
+
+function pathInsideRoot(root, target) {
+  const resolvedRoot = path.resolve(root);
+  const resolvedTarget = path.resolve(target);
+  const rootWithSep = resolvedRoot.endsWith(path.sep) ? resolvedRoot : `${resolvedRoot}${path.sep}`;
+  return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(rootWithSep);
+}
+
+async function readFetchedModEntry(root, dirent) {
+  const modDir = path.join(root, dirent.name);
+  const metadataPath = path.join(modDir, 'mod-source.json');
+  let metadata = null;
+  if (fs.existsSync(metadataPath)) {
+    try {
+      metadata = JSON.parse(await fsp.readFile(metadataPath, 'utf8'));
+    } catch (error) {
+      metadata = { error: error.message };
+    }
+  }
+
+  return {
+    folder: dirent.name,
+    path: modDir,
+    metadataPath: fs.existsSync(metadataPath) ? metadataPath : null,
+    id: Number.isInteger(metadata?.id) ? metadata.id : null,
+    name: metadata?.name || dirent.name,
+    namespace: metadata?.namespace || null,
+    version: metadata?.version || null,
+    loaded: metadata?.loaded ?? null,
+    inActiveProfile: metadata?.inActiveProfile ?? null,
+    metadata,
+  };
+}
+
+function fetchedModSummary(entry) {
+  return {
+    id: entry.id,
+    name: entry.name,
+    folder: entry.folder,
+    namespace: entry.namespace,
+    version: entry.version,
+    loaded: entry.loaded,
+    inActiveProfile: entry.inActiveProfile,
+  };
+}
+
+async function fetchedModEntries(root) {
+  if (!fs.existsSync(root)) return [];
+  const entries = await fsp.readdir(root, { withFileTypes: true });
+  const mods = [];
+  for (const dirent of entries) {
+    if (!dirent.isDirectory()) continue;
+    mods.push(await readFetchedModEntry(root, dirent));
+  }
+  return mods.sort((a, b) => String(a.name).localeCompare(String(b.name)) || String(a.folder).localeCompare(String(b.folder)));
+}
+
+async function selectFetchedMods(args = {}, options = {}) {
+  const root = resolveModSourcesDir(args.outDir);
+  if (!fs.existsSync(root)) {
+    throw new Error(`Fetched mod source directory not found: ${root}. Run mod_manager_fetch_sources first.`);
+  }
+
+  const allMods = await fetchedModEntries(root);
+  let selected = allMods;
+  if (args.modId !== undefined) {
+    const modId = numeric(args.modId, undefined, 1);
+    selected = selected.filter((entry) => entry.id === modId || entry.folder.startsWith(`${modId}-`));
+  }
+  if (args.modName) {
+    const needle = String(args.modName).toLowerCase();
+    selected = selected.filter((entry) =>
+      String(entry.name).toLowerCase().includes(needle)
+      || String(entry.folder).toLowerCase().includes(needle)
+      || String(entry.namespace || '').toLowerCase().includes(needle)
+    );
+  }
+
+  if (selected.length === 0) {
+    throw new Error(`No fetched mod sources matched. Run mod_manager_fetch_sources first or adjust modId/modName. Root: ${root}`);
+  }
+  if (options.requireSingle && selected.length !== 1) {
+    throw new Error(`Expected one fetched mod source, matched ${selected.length}: ${selected.map((entry) => entry.name).join(', ')}`);
+  }
+  return { root, allMods, selected };
+}
+
+function parseRipgrepJson(output, selectedMods, maxResults) {
+  const results = [];
+  for (const line of output.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    let event;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (event.type !== 'match' && event.type !== 'context') continue;
+    const absolutePath = path.resolve(event.data?.path?.text || '');
+    const mod = selectedMods.find((entry) => pathInsideRoot(entry.path, absolutePath));
+    const relativePath = mod ? path.relative(mod.path, absolutePath).replace(/\\/g, '/') : path.basename(absolutePath);
+    results.push({
+      type: event.type,
+      mod: mod ? fetchedModSummary(mod) : null,
+      path: relativePath,
+      lineNumber: event.data?.line_number || null,
+      text: String(event.data?.lines?.text || '').replace(/\r?\n$/, ''),
+      ...(event.type === 'match'
+        ? {
+            submatches: (event.data?.submatches || []).map((match) => ({
+              match: match.match?.text || '',
+              start: match.start,
+              end: match.end,
+            })),
+          }
+        : {}),
+    });
+    if (results.length > maxResults) break;
+  }
+  return {
+    results: results.slice(0, maxResults),
+    truncated: results.length > maxResults,
+  };
+}
+
+async function toolModSourceSearch(args = {}) {
+  const query = String(args.query || '');
+  if (!query) throw new Error('Missing fetched mod source search query.');
+  const maxResults = numeric(args.maxResults, 100, 1);
+  const context = numeric(args.context, 0, 0);
+  const { root, allMods, selected } = await selectFetchedMods(args);
+  const relPath = assertSafeRelativePath(args.path || '.');
+  const targets = [];
+  const missingTargets = [];
+
+  for (const mod of selected) {
+    const target = path.resolve(mod.path, relPath);
+    if (!pathInsideRoot(mod.path, target)) throw new Error(`Path escapes fetched mod source: ${relPath}`);
+    if (fs.existsSync(target)) targets.push(target);
+    else missingTargets.push({ mod: fetchedModSummary(mod), path: relPath });
+  }
+
+  if (targets.length === 0) {
+    throw new Error(`No selected fetched mod source contains path "${relPath}".`);
+  }
+
+  const commandArgs = [
+    '--json',
+    '--line-number',
+    '--color',
+    'never',
+    '--no-messages',
+    '--context',
+    String(context),
+    '--glob',
+    '!mod-source.json',
+  ];
+  if (args.ignoreCase !== false) commandArgs.push('--ignore-case');
+  if (!args.regex) commandArgs.push('--fixed-strings');
+  commandArgs.push('--', query, ...targets);
+
+  const output = runAllowNoMatches('rg', commandArgs);
+  const parsed = parseRipgrepJson(output, selected, maxResults);
+  return textContent(JSON.stringify({
+    query,
+    regex: Boolean(args.regex),
+    ignoreCase: args.ignoreCase !== false,
+    root,
+    searchedMods: selected.map(fetchedModSummary),
+    availableMods: allMods.length,
+    path: relPath,
+    missingTargets,
+    ...parsed,
+  }, null, 2));
+}
+
+async function toolModSourceRead(args = {}) {
+  const relPath = assertSafeRelativePath(args.path);
+  const startLine = numeric(args.startLine, 1, 1);
+  const maxLines = numeric(args.maxLines, 200, 1, 1000);
+  const { root, selected } = await selectFetchedMods(args, { requireSingle: true });
+  const [mod] = selected;
+  const filePath = path.resolve(mod.path, relPath);
+  if (!pathInsideRoot(mod.path, filePath)) throw new Error(`Path escapes fetched mod source: ${relPath}`);
+  if (!fs.existsSync(filePath)) throw new Error(`Fetched mod source file not found: ${relPath} in ${mod.name}`);
+
+  const text = await fsp.readFile(filePath, 'utf8');
+  const lines = text.split('\n');
+  const selectedLines = lines.slice(startLine - 1, startLine - 1 + maxLines);
+  const numbered = selectedLines.map((line, index) => `${startLine + index}:${line}`).join('\n');
+
+  return textContent(JSON.stringify({
+    root,
+    mod: fetchedModSummary(mod),
+    path: relPath,
+    startLine,
+    maxLines,
+    text: numbered,
+  }, null, 2));
+}
+
 async function toolBrowserCheck() {
   const output = run(process.execPath, [path.join(REPO_ROOT, 'scripts/mod-test.mjs'), '--mode', 'check']);
   return textContent(output);
@@ -1736,6 +2167,135 @@ function recordSessionBrowserEvent(session, event) {
 function visibleBrowserEvents(session, maxBrowserEvents = 50) {
   const max = numeric(maxBrowserEvents, 50, 0);
   return session.browserEvents.slice(max === 0 ? session.browserEvents.length : -max).map(({ dedupeKey, ...event }) => event);
+}
+
+function cdpMetricsToObject(result) {
+  const metrics = {};
+  for (const metric of result?.metrics || []) {
+    if (!metric?.name) continue;
+    metrics[metric.name] = metric.value;
+  }
+  return metrics;
+}
+
+function metricDeltas(current = {}, baseline = {}) {
+  const deltas = {};
+  for (const [key, value] of Object.entries(current || {})) {
+    if (typeof value !== 'number' || typeof baseline?.[key] !== 'number') continue;
+    deltas[key] = value - baseline[key];
+  }
+  return deltas;
+}
+
+async function readCdpPerformanceSnapshot(cdpSession) {
+  const metrics = cdpMetricsToObject(await cdpSession.send('Performance.getMetrics'));
+  let heapUsage = null;
+  try {
+    heapUsage = await cdpSession.send('Runtime.getHeapUsage');
+  } catch (error) {
+    heapUsage = { error: error instanceof Error ? error.message : String(error) };
+  }
+  return {
+    capturedAt: new Date().toISOString(),
+    metrics,
+    heapUsage,
+  };
+}
+
+function cpuProfileFunctionKey(node) {
+  const frame = node?.callFrame || {};
+  const functionName = frame.functionName || '(anonymous)';
+  const url = frame.url || '';
+  const lineNumber = Number.isFinite(frame.lineNumber) ? frame.lineNumber + 1 : null;
+  const columnNumber = Number.isFinite(frame.columnNumber) ? frame.columnNumber + 1 : null;
+  return JSON.stringify({ functionName, url, lineNumber, columnNumber });
+}
+
+function summarizeCpuProfile(cpuProfile, maxFunctions = 25) {
+  const nodes = Array.isArray(cpuProfile?.nodes) ? cpuProfile.nodes : [];
+  const samples = Array.isArray(cpuProfile?.samples) ? cpuProfile.samples : [];
+  const timeDeltas = Array.isArray(cpuProfile?.timeDeltas) ? cpuProfile.timeDeltas : [];
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const fallbackDeltaMicros =
+    samples.length > 0 && Number.isFinite(cpuProfile?.startTime) && Number.isFinite(cpuProfile?.endTime)
+      ? Math.max(0, cpuProfile.endTime - cpuProfile.startTime) / samples.length
+      : 0;
+  const byFunction = new Map();
+  let totalSelfTimeMs = 0;
+
+  for (let index = 0; index < samples.length; index += 1) {
+    const node = nodeById.get(samples[index]);
+    if (!node) continue;
+    const deltaMicros = Number.isFinite(timeDeltas[index]) ? timeDeltas[index] : fallbackDeltaMicros;
+    const selfTimeMs = Math.max(0, deltaMicros / 1000);
+    const key = cpuProfileFunctionKey(node);
+    const frame = node.callFrame || {};
+    const existing = byFunction.get(key) || {
+      functionName: frame.functionName || '(anonymous)',
+      url: frame.url || '',
+      lineNumber: Number.isFinite(frame.lineNumber) ? frame.lineNumber + 1 : null,
+      columnNumber: Number.isFinite(frame.columnNumber) ? frame.columnNumber + 1 : null,
+      sampleCount: 0,
+      selfTimeMs: 0,
+    };
+    existing.sampleCount += 1;
+    existing.selfTimeMs += selfTimeMs;
+    byFunction.set(key, existing);
+    totalSelfTimeMs += selfTimeMs;
+  }
+
+  const topFunctions = [...byFunction.values()]
+    .sort((a, b) => b.selfTimeMs - a.selfTimeMs)
+    .slice(0, maxFunctions === 0 ? byFunction.size : maxFunctions)
+    .map((entry) => ({
+      ...entry,
+      selfTimeMs: Number(entry.selfTimeMs.toFixed(3)),
+      percent: totalSelfTimeMs > 0 ? Number(((entry.selfTimeMs / totalSelfTimeMs) * 100).toFixed(2)) : 0,
+    }));
+
+  return {
+    totalSelfTimeMs: Number(totalSelfTimeMs.toFixed(3)),
+    sampleCount: samples.length,
+    nodeCount: nodes.length,
+    startTime: cpuProfile?.startTime ?? null,
+    endTime: cpuProfile?.endTime ?? null,
+    topFunctions,
+  };
+}
+
+async function readBrowserProfileSnapshot(session) {
+  const profile = session.profile;
+  if (!profile) return null;
+  if (profile.browserProfileStop || profile.cpuProfileStop) {
+    return {
+      cpuProfileActive: false,
+      browserMetricsActive: false,
+      start: profile.browserProfileStart || null,
+      stop: profile.browserProfileStop || null,
+      metricDeltas: profile.browserProfileStop?.metrics
+        ? metricDeltas(profile.browserProfileStop.metrics, profile.browserProfileStart?.metrics || {})
+        : null,
+      cpuProfile: profile.cpuProfileStop || null,
+      warnings: profile.cdpWarnings || [],
+    };
+  }
+  if (!profile.cdpSession) {
+    return {
+      cpuProfileActive: false,
+      browserMetricsActive: false,
+      warnings: profile.cdpWarnings || [],
+    };
+  }
+  const snapshot = profile.browserMetrics ? await readCdpPerformanceSnapshot(profile.cdpSession) : null;
+  return {
+    cpuProfileActive: Boolean(profile.cpuProfile && profile.active),
+    browserMetricsActive: Boolean(profile.browserMetrics && profile.active),
+    samplingIntervalMicros: profile.samplingIntervalMicros || null,
+    start: profile.browserProfileStart || null,
+    current: snapshot,
+    metricDeltas: snapshot?.metrics ? metricDeltas(snapshot.metrics, profile.browserProfileStart?.metrics || {}) : null,
+    warnings: profile.cdpWarnings || [],
+  };
 }
 
 async function readModioUnreachablePrompt(page) {
@@ -2492,6 +3052,166 @@ async function toolGameSessionDebugProbe(args = {}) {
   return textContent(JSON.stringify({ ok: true, sessionId: session.id, debug }, null, 2));
 }
 
+async function toolGameSessionTimeSkip(args = {}) {
+  const session = await getGameSession(browserSessionId(args));
+  const maxHours = numericFloat(args.maxHours, 24, 0.000001, 720);
+  const hours = numericFloat(args.hours, 1, 0.000001, maxHours);
+  const timeoutMs = numeric(args.timeoutMs, 120000, 1000);
+  const result = await session.page.evaluate(
+    async ({ hours, timeoutMs, waitForExit, requireActiveAction, allowCombatWithoutOfflineSetting, dismissModals }) => {
+      if (typeof game === 'undefined') throw new Error('game is not available in the page.');
+      if (typeof isLoaded !== 'undefined' && !isLoaded) throw new Error('No character save is loaded.');
+      if (typeof game.testForOffline !== 'function') throw new Error('game.testForOffline(hours) is not available.');
+      if (!Number.isFinite(hours) || hours <= 0) throw new Error(`Invalid offline hours: ${hours}`);
+      if (game.isGolbinRaid) throw new Error('Offline time skip is not supported during Golbin Raid.');
+
+      const summarizeAction = (action) => {
+        if (action === undefined || action === null) return null;
+        return {
+          id: action.id || null,
+          name: action.name || null,
+          media: action.media || null,
+          isCombat: action === game.combat,
+          isThieving: action === game.thieving,
+        };
+      };
+      const modalSummary = () => {
+        const modal = document.querySelector('.swal2-popup');
+        if (!modal) return null;
+        const style = window.getComputedStyle(modal);
+        const visible = style.display !== 'none' && style.visibility !== 'hidden';
+        if (!visible) return null;
+        return {
+          title: document.querySelector('.swal2-title')?.textContent?.trim() || '',
+          text: document.querySelector('.swal2-html-container')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        };
+      };
+      const before = {
+        activeAction: summarizeAction(game.activeAction),
+        isInOnlineLoop: game._isInOnlineLoop,
+        tickTimestamp: game.tickTimestamp,
+        saveTimestamp: game.saveTimestamp,
+        enableRendering: game.enableRendering,
+        loadingOfflineProgress: typeof loadingOfflineProgress !== 'undefined' ? Boolean(loadingOfflineProgress) : null,
+        offlineCombatEnabled: Boolean(game.settings?.boolData?.enableOfflineCombat?.currentValue ?? game.settings?.enableOfflineCombat),
+      };
+
+      if (requireActiveAction && before.activeAction === null) {
+        throw new Error('No active action is running. Start a skill or combat before triggering offline processing.');
+      }
+      if (
+        !allowCombatWithoutOfflineSetting &&
+        before.activeAction &&
+        (before.activeAction.isCombat || before.activeAction.isThieving) &&
+        !before.offlineCombatEnabled
+      ) {
+        throw new Error('Offline combat/thieving is disabled. Enable it in game settings or pass allowCombatWithoutOfflineSetting=true.');
+      }
+
+      const events = [];
+      const startedAt = performance.now();
+      const waitForEvent = () =>
+        new Promise((resolve) => {
+          let done = false;
+          const cleanup = () => {
+            try {
+              game.off?.('offlineLoopEntered', onEntered);
+              game.off?.('offlineLoopExited', onExited);
+            } catch {}
+            clearTimeout(timer);
+          };
+          const finish = (value) => {
+            if (done) return;
+            done = true;
+            cleanup();
+            resolve(value);
+          };
+          const onEntered = () => {
+            events.push({ type: 'entered', atMs: Math.max(0, performance.now() - startedAt), atIso: new Date().toISOString() });
+          };
+          const onExited = () => {
+            events.push({ type: 'exited', atMs: Math.max(0, performance.now() - startedAt), atIso: new Date().toISOString() });
+            finish({ completed: true, timedOut: false });
+          };
+          const timer = setTimeout(() => {
+            finish({
+              completed: false,
+              timedOut: true,
+              stillInOfflineLoop: game._isInOnlineLoop === false,
+            });
+          }, timeoutMs);
+          game.on?.('offlineLoopEntered', onEntered);
+          game.on?.('offlineLoopExited', onExited);
+        });
+
+      const waitPromise = waitForExit ? waitForEvent() : null;
+      await game.testForOffline(hours);
+      const wait = waitForExit
+        ? await waitPromise
+        : {
+            completed: false,
+            timedOut: false,
+            skipped: true,
+            stillInOfflineLoop: game._isInOnlineLoop === false,
+          };
+
+      let dismissedModal = null;
+      if (dismissModals) {
+        const beforeDismiss = modalSummary();
+        const confirm = document.querySelector('.swal2-confirm');
+        if (confirm) {
+          confirm.click();
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        dismissedModal = {
+          before: beforeDismiss,
+          clickedConfirm: Boolean(confirm),
+          after: modalSummary(),
+        };
+      }
+
+      const after = {
+        activeAction: summarizeAction(game.activeAction),
+        isInOnlineLoop: game._isInOnlineLoop,
+        tickTimestamp: game.tickTimestamp,
+        saveTimestamp: game.saveTimestamp,
+        enableRendering: game.enableRendering,
+        loadingOfflineProgress: typeof loadingOfflineProgress !== 'undefined' ? Boolean(loadingOfflineProgress) : null,
+        offlineInfo: game._offlineInfo
+          ? {
+              startTime: game._offlineInfo.startTime ?? null,
+              timeProcessed: game._offlineInfo.timeProcessed ?? null,
+              tickRate: game._offlineInfo.tickRate ?? null,
+            }
+          : null,
+        modal: modalSummary(),
+      };
+
+      return {
+        method: 'game.testForOffline',
+        hours,
+        simulatedMs: hours * 60 * 60 * 1000,
+        elapsedMs: Math.max(0, performance.now() - startedAt),
+        before,
+        after,
+        wait,
+        events,
+        dismissedModal,
+      };
+    },
+    {
+      hours,
+      timeoutMs,
+      waitForExit: args.waitForExit !== false,
+      requireActiveAction: args.requireActiveAction !== false,
+      allowCombatWithoutOfflineSetting: Boolean(args.allowCombatWithoutOfflineSetting),
+      dismissModals: Boolean(args.dismissModals),
+    }
+  );
+  const state = await collectGameSessionState(session, { maxBrowserEvents: 50 });
+  return textContent(JSON.stringify({ ok: true, sessionId: session.id, result, state }, null, 2));
+}
+
 async function toolGameSessionScreenshot(args = {}) {
   const session = await getGameSession(browserSessionId(args));
   const reportDir = await newReportDir(args.reportDir || DEFAULT_REPORTS_DIR, `game-session-${session.id}`);
@@ -2520,6 +3240,9 @@ async function toolGameSessionStop(args = {}) {
 async function startGameProfile(session, args = {}) {
   if (session.profile?.active) throw new Error(`Profile "${session.profile.label}" is already active for session "${session.id}".`);
   const trace = args.trace !== false;
+  const cpuProfile = args.cpuProfile !== false;
+  const browserMetrics = args.browserMetrics !== false;
+  const samplingIntervalMicros = numeric(args.samplingIntervalMicros, 1000, 100, 100000);
   const label = String(args.label || 'profile');
   if (trace) {
     await session.context.tracing.start({
@@ -2538,6 +3261,7 @@ async function startGameProfile(session, args = {}) {
         startedAt: performance.now(),
         startedAtIso: new Date().toISOString(),
         stoppedAtIso: null,
+        marks: [],
         longTasks: [],
         qsa: {
           instrumented: false,
@@ -2611,14 +3335,68 @@ async function startGameProfile(session, args = {}) {
     { label, instrumentQuerySelectorAll: Boolean(args.instrumentQuerySelectorAll) }
   );
 
+  let cdpSession = null;
+  const cdpWarnings = [];
+  let browserProfileStart = null;
+  let cpuProfileActive = false;
+  let browserMetricsActive = false;
+
+  if (cpuProfile || browserMetrics) {
+    try {
+      cdpSession = await session.context.newCDPSession(session.page);
+      if (browserMetrics) {
+        try {
+          await cdpSession.send('Performance.enable');
+          browserProfileStart = await readCdpPerformanceSnapshot(cdpSession);
+          browserMetricsActive = true;
+        } catch (error) {
+          cdpWarnings.push(`Performance metrics unavailable: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      if (cpuProfile) {
+        try {
+          await cdpSession.send('Profiler.enable');
+          await cdpSession.send('Profiler.setSamplingInterval', { interval: samplingIntervalMicros });
+          await cdpSession.send('Profiler.start');
+          cpuProfileActive = true;
+        } catch (error) {
+          cdpWarnings.push(`CPU profile unavailable: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      if (!cpuProfileActive && !browserMetricsActive) {
+        await cdpSession.detach().catch(() => {});
+        cdpSession = null;
+      }
+    } catch (error) {
+      cdpWarnings.push(`CDP profiling unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      cdpSession = null;
+    }
+  }
+
   session.profile = {
     active: true,
     label,
     trace,
+    cpuProfile: cpuProfileActive,
+    browserMetrics: browserMetricsActive,
+    samplingIntervalMicros: cpuProfileActive ? samplingIntervalMicros : null,
+    cdpSession,
+    cdpWarnings,
+    browserProfileStart,
+    browserProfileStop: null,
+    cpuProfileStop: null,
     browserEventStartIndex: session.browserEvents.length,
     startedAt: new Date().toISOString(),
   };
-  return inPage;
+  return {
+    ...inPage,
+    trace,
+    cpuProfile: cpuProfileActive,
+    browserMetrics: browserMetricsActive,
+    samplingIntervalMicros: cpuProfileActive ? samplingIntervalMicros : null,
+    cdpWarnings,
+    browserProfileStart,
+  };
 }
 
 async function readGameProfile(session, args = {}) {
@@ -2657,12 +3435,16 @@ async function readGameProfile(session, args = {}) {
       longTaskCount: activeProfile?.longTasks?.length || 0,
       qsa: activeProfile?.qsa || null,
       offlineEvents: activeProfile?.offlineEvents || [],
+      marks: activeProfile?.marks || [],
       navigation,
       resources: resourceSummary,
       memory,
       querySelectorAllName: document.querySelectorAll?.name || '',
     };
   }, { maxLongTasks });
+  const browserProfile = await readBrowserProfileSnapshot(session).catch((error) => ({
+    error: error instanceof Error ? error.message : String(error),
+  }));
   const state = await collectGameSessionState(session, { maxBrowserEvents: 0 });
   const browserEvents = session.browserEvents
     .slice(browserEventStartIndex)
@@ -2671,6 +3453,7 @@ async function readGameProfile(session, args = {}) {
   return {
     sessionId: session.id,
     profile,
+    browserProfile,
     traceActive: Boolean(session.profile?.trace && session.profile.active),
     state: {
       game: state.game,
@@ -2683,10 +3466,83 @@ async function readGameProfile(session, args = {}) {
   };
 }
 
+async function markGameProfile(session, args = {}) {
+  if (!session.profile?.active) throw new Error(`No active profile for session "${session.id}".`);
+  const label = String(args.label || '').trim();
+  if (!label) throw new Error('game_profile_mark requires label.');
+  const detail = args.detail === undefined ? null : String(args.detail);
+  return await session.page.evaluate(
+    ({ label, detail }) => {
+      const activeProfile = globalThis.__mcpProfile;
+      if (!activeProfile?.active) throw new Error('No active in-page MCP profile.');
+      if (!Array.isArray(activeProfile.marks)) activeProfile.marks = [];
+      const now = performance.now();
+      const mark = {
+        label,
+        detail,
+        at: now,
+        sinceStartMs: Math.max(0, now - activeProfile.startedAt),
+        atIso: new Date().toISOString(),
+      };
+      activeProfile.marks.push(mark);
+      try {
+        performance.mark(`mcp:${label}`);
+      } catch {}
+      return mark;
+    },
+    { label, detail }
+  );
+}
+
 async function stopGameProfile(session, args = {}) {
   if (!session.profile?.active) throw new Error(`No active profile for session "${session.id}".`);
   const reportDir = await newReportDir(args.reportDir || DEFAULT_REPORTS_DIR, `game-profile-${session.id}-${session.profile.label}`);
+  const maxCpuFunctions = numeric(args.maxCpuFunctions, 25, 0, 500);
   let tracePath = null;
+  let cpuProfile = null;
+  let browserProfileStop = null;
+  let browserMetricsPath = null;
+  const cdpWarnings = [...(session.profile.cdpWarnings || [])];
+
+  if (session.profile.cdpSession) {
+    if (session.profile.cpuProfile) {
+      try {
+        const result = await session.profile.cdpSession.send('Profiler.stop');
+        const rawProfile = result.profile || result;
+        const cpuProfilePath = path.join(reportDir, 'cpu-profile.cpuprofile');
+        await fsp.writeFile(cpuProfilePath, `${JSON.stringify(rawProfile, null, 2)}\n`);
+        cpuProfile = {
+          path: cpuProfilePath,
+          summary: summarizeCpuProfile(rawProfile, maxCpuFunctions),
+        };
+      } catch (error) {
+        cdpWarnings.push(`CPU profile stop failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    if (session.profile.browserMetrics) {
+      try {
+        browserProfileStop = await readCdpPerformanceSnapshot(session.profile.cdpSession);
+        browserMetricsPath = path.join(reportDir, 'browser-metrics.json');
+        await fsp.writeFile(
+          browserMetricsPath,
+          `${JSON.stringify(
+            {
+              start: session.profile.browserProfileStart,
+              stop: browserProfileStop,
+              metricDeltas: metricDeltas(browserProfileStop.metrics, session.profile.browserProfileStart?.metrics || {}),
+            },
+            null,
+            2
+          )}\n`
+        );
+      } catch (error) {
+        cdpWarnings.push(`Browser metric stop failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    await session.profile.cdpSession.detach().catch(() => {});
+    session.profile.cdpSession = null;
+  }
+
   if (session.profile.trace) {
     tracePath = path.join(reportDir, 'trace.zip');
     await session.context.tracing.stop({ path: tracePath });
@@ -2711,10 +3567,14 @@ async function stopGameProfile(session, args = {}) {
       longTaskCount: activeProfile.longTasks?.length || 0,
       qsa: activeProfile.qsa || null,
       offlineEvents: activeProfile.offlineEvents || [],
+      marks: activeProfile.marks || [],
     };
   });
   session.profile.active = false;
   session.profile.tracePath = tracePath;
+  session.profile.cpuProfileStop = cpuProfile;
+  session.profile.browserProfileStop = browserProfileStop;
+  session.profile.cdpWarnings = cdpWarnings;
   const summary = await readGameProfile(session, args).catch(() => null);
   const report = {
     ok: true,
@@ -2722,6 +3582,18 @@ async function stopGameProfile(session, args = {}) {
     profile,
     summary,
     tracePath,
+    cpuProfile,
+    browserProfile: browserProfileStop
+      ? {
+          start: session.profile.browserProfileStart,
+          stop: browserProfileStop,
+          metricDeltas: metricDeltas(browserProfileStop.metrics, session.profile.browserProfileStart?.metrics || {}),
+          path: browserMetricsPath,
+          warnings: cdpWarnings,
+        }
+      : {
+          warnings: cdpWarnings,
+        },
     reportDir,
     capturedAt: new Date().toISOString(),
   };
@@ -2739,6 +3611,12 @@ async function toolGameProfileRead(args = {}) {
   const session = await getGameSession(browserSessionId(args));
   const profile = await readGameProfile(session, args);
   return textContent(JSON.stringify({ ok: true, ...profile }, null, 2));
+}
+
+async function toolGameProfileMark(args = {}) {
+  const session = await getGameSession(browserSessionId(args));
+  const mark = await markGameProfile(session, args);
+  return textContent(JSON.stringify({ ok: true, sessionId: session.id, mark }, null, 2));
 }
 
 async function toolGameProfileStop(args = {}) {
@@ -2924,6 +3802,7 @@ async function toolModProfile(args = {}) {
 
 async function callTool(name, args) {
   try {
+    if (name === 'melvor_mcp_context') return await toolMcpContext(args);
     if (name === 'game_source_search') return await toolSearch(args);
     if (name === 'game_source_read') return await toolRead(args);
     if (name === 'game_source_manifest') return await toolManifest(args);
@@ -2935,6 +3814,8 @@ async function callTool(name, args) {
     if (name === 'melvor_modding_guides_search') return await toolGuidesSearch(args);
     if (name === 'mod_manager_loaded_mods') return await toolModManagerLoaded(args);
     if (name === 'mod_manager_fetch_sources') return await toolModManagerFetchSources(args);
+    if (name === 'mod_source_search') return await toolModSourceSearch(args);
+    if (name === 'mod_source_read') return await toolModSourceRead(args);
     if (name === 'mod_manager_configure_mod') return await toolModManagerConfigure(args);
     if (name === 'creator_toolkit_local_mods') return await toolCreatorToolkitLocalMods(args);
     if (name === 'melvor_mod_release_status') return await toolModReleaseStatus(args);
@@ -2946,10 +3827,12 @@ async function callTool(name, args) {
     if (name === 'game_session_action') return await toolGameSessionAction(args);
     if (name === 'game_session_state') return await toolGameSessionState(args);
     if (name === 'game_session_debug_probe') return await toolGameSessionDebugProbe(args);
+    if (name === 'game_session_time_skip') return await toolGameSessionTimeSkip(args);
     if (name === 'game_session_screenshot') return await toolGameSessionScreenshot(args);
     if (name === 'game_session_stop') return await toolGameSessionStop(args);
     if (name === 'game_profile_start') return await toolGameProfileStart(args);
     if (name === 'game_profile_read') return await toolGameProfileRead(args);
+    if (name === 'game_profile_mark') return await toolGameProfileMark(args);
     if (name === 'game_profile_stop') return await toolGameProfileStop(args);
     if (name === 'mod_test_smoke') return await toolModSmoke(args);
     if (name === 'mod_profile_runtime') return await toolModProfile(args);
@@ -3009,6 +3892,7 @@ async function handleRequest(message) {
         name: 'melvor-game-source-tools',
         version: SERVER_VERSION,
       },
+      instructions: MCP_SERVER_INSTRUCTIONS,
     });
   }
 
