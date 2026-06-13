@@ -732,9 +732,23 @@ async function modioJson(context, endpoint, params = {}) {
   return payload;
 }
 
-function isoFromUnix(value) {
+function isoFromModioTimestamp(value) {
   if (!value) return null;
-  return new Date(Number(value) * 1000).toISOString();
+  if (value instanceof Date) {
+    const time = value.getTime();
+    return Number.isFinite(time) ? value.toISOString() : null;
+  }
+
+  if (typeof value === 'number' || /^[0-9]+$/.test(String(value))) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return null;
+    const milliseconds = numeric > 9999999999 ? numeric : numeric * 1000;
+    const date = new Date(milliseconds);
+    return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+  }
+
+  const date = new Date(String(value));
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 }
 
 function sanitizeModioRecord(record) {
@@ -745,13 +759,13 @@ function sanitizeModioRecord(record) {
     name_id: record.name_id || null,
     profile_url: record.profile_url || null,
     author: record.submitted_by?.username || record.submitted_by?.display_name || record.submitted_by?.id || null,
-    date_updated: isoFromUnix(record.date_updated),
+    date_updated: isoFromModioTimestamp(record.date_updated),
     modfile: record.modfile
       ? {
           id: record.modfile.id || null,
           version: record.modfile.version || null,
           filename: record.modfile.filename || null,
-          date_added: isoFromUnix(record.modfile.date_added),
+          date_added: isoFromModioTimestamp(record.modfile.date_added),
         }
       : null,
   };
