@@ -117,6 +117,67 @@ Useful tools:
 
 Release uploads are blocked for `reference_only` mods and for any mod whose workspace mapping does not set `automation.upload` to `true`. Read credentials from an ignored workspace `.env`; do not put API keys or OAuth tokens in this repository.
 
+### mod.io Credentials
+
+The release tools use two different mod.io credentials:
+
+- `MODIO_API_KEY`: read/query credential. mod.io documents API-key requests as read-only.
+- `MODIO_ACCESS_TOKEN`: OAuth bearer token. mod.io requires OAuth access tokens for create, update, delete, and upload operations.
+
+The canonical mod.io docs are:
+
+- REST API overview and API access: https://docs.mod.io/restapi
+- Authentication overview: https://docs.mod.io/restapi/introduction
+- Email security-code OAuth flow: https://docs.mod.io/restapi/docs/request-email-security-code
+
+For this workspace, keep the real values in the ignored mod workspace `.env`, not in this tools repo:
+
+```dotenv
+MODIO_API_BASE_URL=https://u-48472067.modapi.io/v1
+MODIO_API_KEY=your_32_character_api_key
+MODIO_ACCESS_TOKEN=your_oauth_bearer_token
+MODIO_GAME_ID=2869
+```
+
+The MCP tools also accept explicit paths so a Codex session can read the correct workspace without copying secrets:
+
+```json
+{
+  "workspaceRoot": "/home/lrasmussen/git/melvor-modding",
+  "modsRoot": "/home/lrasmussen/git/melvor-modding/mods",
+  "mappingFile": "/home/lrasmussen/git/melvor-modding/config/modio-matches.json",
+  "envFile": "/home/lrasmussen/git/melvor-modding/.env",
+  "mod": "skiller-auto-resume"
+}
+```
+
+Typical workflow:
+
+1. Run `melvor_mod_release_status` first. This is read-only and verifies git state, manifest version, release policy, and mod.io mapping.
+2. Build or pass a zip path.
+3. Run `melvor_modio_upload` without `apply` to get the exact confirmation phrase.
+4. Run `melvor_modio_upload` with `apply: true`, `active: false`, and the exact `confirm` phrase.
+5. Promote a tested public file separately. New public mod files should be uploaded inactive first.
+
+Example upload arguments:
+
+```json
+{
+  "workspaceRoot": "/home/lrasmussen/git/melvor-modding",
+  "modsRoot": "/home/lrasmussen/git/melvor-modding/mods",
+  "mappingFile": "/home/lrasmussen/git/melvor-modding/config/modio-matches.json",
+  "envFile": "/home/lrasmussen/git/melvor-modding/.env",
+  "mod": "skiller-auto-resume",
+  "zipPath": "/home/lrasmussen/git/melvor-modding/build/skiller-auto-resume/skiller-auto-resume-4.zip",
+  "active": false,
+  "apply": true,
+  "confirm": "upload skiller-auto-resume 0.1.32 to mod.io 6132432",
+  "changelog": "Short changelog for the inactive test build."
+}
+```
+
+Do not print `.env`, API keys, access tokens, usernames, or passwords in logs.
+
 ## Mod Manager Sources
 
 Put Melvor Cloud credentials in `.env` when you want browser automation to sign in:
