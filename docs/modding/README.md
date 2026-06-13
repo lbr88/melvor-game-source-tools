@@ -36,7 +36,7 @@ Use for Creator Toolkit behaviour: local mod records, IndexedDB storage, linked 
 
 `live-game-sessions.md`
 
-Use for interactive MCP browser work: persistent Melvor sessions, read-only save guards, screenshots, live state reads, offline time-skip testing, CDP CPU profiling, Chrome performance metrics, and profiling attached to an open session.
+Use for interactive MCP browser work: persistent Melvor sessions, read-only save guards, save fixtures, temporary Creator Toolkit local mods, screenshots, live state reads, temporary Mod Manager profiles, offline time-skip testing, CDP CPU profiling, Chrome performance metrics, and profiling attached to an open session.
 
 `live-debugging-patterns.md`
 
@@ -67,5 +67,11 @@ For "where is a symbol or hook in source?", search for `generated source referen
 For "what do installed mods do with this symbol?", run `mod_manager_fetch_sources` to refresh local installed mod sources, then use `mod_source_search`.
 
 For "how do I test a local mod safely?", read `creator-toolkit-local-mods.md`, `live-game-sessions.md`, and `game-save-browser-tests.md`.
+
+For "how do I test against a known save?", read `live-game-sessions.md` and use `game_session_save` to export, import, and load ignored save fixtures.
+
+For "how do I run temporary local test code?", read `live-game-sessions.md` and use `game_session_local_mod` with Creator Toolkit.
+
+For "how do I profile one installed mod or a specific interaction set?", read `live-game-sessions.md` and use `game_session_mod_profile` before `game_profile_start`.
 
 For "why does this look fixed in data but not in the game?", read `live-debugging-patterns.md` and compare both the game model and rendered DOM.

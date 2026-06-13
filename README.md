@@ -63,6 +63,9 @@ Main tools:
 - `game_session_start`: starts a persistent, visible Melvor browser session and optionally loads the configured save slot.
 - `game_session_action`: clicks, types, waits, opens game pages, dismisses SweetAlert modals, or evaluates page JavaScript in that live session.
 - `game_session_state`: reads the live session state, loaded mods, Optimizer state, browser events, and blocked save writes.
+- `game_session_save`: lists save slots/fixtures, exports named ignored save fixtures, imports fixtures into local test slots, and loads slot/fixture saves.
+- `game_session_local_mod`: installs generated or local-path Creator Toolkit local mods into the live session, reloads, verifies, and cleans them up.
+- `game_session_mod_profile`: snapshots, temporarily replaces, reloads, and restores the live session's active Mod Manager profile for isolated or interaction-set profiling.
 - `game_session_debug_probe`: samples reusable live debugging facts, including modal state, bare/globalThis symbols, common game state, and selector matches.
 - `game_session_time_skip`: triggers Melvor offline processing in a loaded live session with `game.testForOffline(hours)`, useful for testing mods that handle offline progress.
 - `game_session_screenshot`: screenshots the live session without closing it.
@@ -218,3 +221,9 @@ Use `melvor_modding_guides_list` next: it returns the docs overview, recommended
 For offline-processing mod tests, start a read-only live session with a loaded save and an active action, then call `game_session_time_skip` with a small `hours` value. The tool uses the same underlying game helper that Time Skip relies on, `game.testForOffline(hours)`, and reports offline loop entry/exit, before/after state, modals, and blocked save writes.
 
 For performance analysis, use `game_profile_start` on an existing live session. By default it enables Playwright tracing, Chrome DevTools Protocol CPU sampling, Chrome performance metrics, heap usage reads, long-task collection, and optional targeted instrumentation such as `instrumentQuerySelectorAll`. Use `game_profile_mark` before and after expensive steps, then `game_profile_stop` to write `trace.zip`, `cpu-profile.cpuprofile`, `browser-metrics.json`, and `report.json` under ignored `reports/`.
+
+For isolated mod profiling, use `game_session_mod_profile` after `game_session_start` and before `game_profile_start`. It can dry-run or apply a temporary browser-session-only Mod Manager profile containing one mod, one mod plus transitive installed dependencies, or an explicit interaction set. Actual changes require `apply: true`; use `restore` with the same `snapshotKey` to return to the previous profile state.
+
+For repeatable save-state testing, use `game_session_save` in a live session. Save fixtures are JSON files under ignored `save-fixtures/`; list operations redact save strings and return metadata only. Exporting/writing fixtures, importing fixtures into local slots, and loading saves are dry-run unless `apply: true` is supplied.
+
+For temporary local test code, use `game_session_local_mod` in a live session. It uses the installed Creator Toolkit to add a generated setup module or a local mod path into IndexedDB, reloads so Creator Toolkit loads it, verifies by marker/name/namespace, and can clean up the session-created local mods. This is the preferred path for save-generation probes, runtime instrumentation, and local profiling shims that should never be uploaded.

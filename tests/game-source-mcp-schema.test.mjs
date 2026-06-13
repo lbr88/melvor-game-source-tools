@@ -129,6 +129,9 @@ test('MCP tool schemas are OpenAI-compatible at the top level', async (t) => {
   assert.ok(toolNames.has('game_save_test'));
   assert.ok(toolNames.has('game_session_start'));
   assert.ok(toolNames.has('game_session_action'));
+  assert.ok(toolNames.has('game_session_save'));
+  assert.ok(toolNames.has('game_session_local_mod'));
+  assert.ok(toolNames.has('game_session_mod_profile'));
   assert.ok(toolNames.has('game_session_debug_probe'));
   assert.ok(toolNames.has('game_session_time_skip'));
   assert.ok(toolNames.has('mod_source_search'));
@@ -147,6 +150,33 @@ test('MCP tool schemas are OpenAI-compatible at the top level', async (t) => {
   assert.match(
     tools.find((tool) => tool.name === 'game_session_time_skip')?.description || '',
     /game\.testForOffline/
+  );
+  assert.match(
+    tools.find((tool) => tool.name === 'game_session_save')?.description || '',
+    /save fixtures/
+  );
+  assert.ok(
+    tools
+      .find((tool) => tool.name === 'game_session_save')
+      ?.inputSchema?.properties?.operation?.enum?.includes('load_fixture')
+  );
+  assert.match(
+    tools.find((tool) => tool.name === 'game_session_mod_profile')?.description || '',
+    /temporarily replace/
+  );
+  assert.match(
+    tools.find((tool) => tool.name === 'game_session_local_mod')?.description || '',
+    /Creator Toolkit/
+  );
+  assert.ok(
+    tools
+      .find((tool) => tool.name === 'game_session_local_mod')
+      ?.inputSchema?.properties?.operation?.enum?.includes('install_generated')
+  );
+  assert.ok(
+    tools
+      .find((tool) => tool.name === 'game_session_mod_profile')
+      ?.inputSchema?.properties?.operation?.enum?.includes('load_with_dependencies')
   );
   assert.match(
     tools.find((tool) => tool.name === 'game_profile_start')?.description || '',
@@ -334,8 +364,11 @@ test('MCP context exposes a broad discovery map', async (t) => {
   assert.ok(context.gameInternals.find((entry) => entry.docs.includes('game-internals-overview')));
   assert.ok(context.gameInternals.find((entry) => /Items, bank, equipment, and combat/.test(entry.area)));
   assert.ok(context.searchStarters.includes('mod_manager_fetch_sources mod_source_search installed mods'));
+  assert.ok(context.searchStarters.includes('game_session_local_mod generated local probes Creator Toolkit'));
   assert.ok(context.searchStarters.includes('game.testForOffline Time Skip offline processing'));
   assert.ok(context.searchStarters.includes('CDP CPU profile browser metrics long tasks heap trace'));
+  assert.ok(context.searchStarters.includes('game_session_save save fixtures local cloud slots'));
+  assert.ok(context.searchStarters.includes('game_session_mod_profile temporary profile dependencies profiling'));
   assert.ok(context.searchStarters.includes('how Melvor works boot registries game loop render queue'));
 
   const listResponse = await client.request('tools/call', {

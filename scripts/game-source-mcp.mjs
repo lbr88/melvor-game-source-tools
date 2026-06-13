@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
@@ -34,6 +35,7 @@ const DEFAULT_SOURCE_REPO = process.env.GAME_SOURCE_REPO
 const DEFAULT_MODS_ROOT = process.env.MELVOR_MODS_ROOT || path.join(REPO_ROOT, 'mods');
 const DEFAULT_REPORTS_DIR = process.env.MELVOR_REPORTS_DIR || path.join(REPO_ROOT, 'reports');
 const DEFAULT_MOD_SOURCES_DIR = process.env.MELVOR_MOD_SOURCES_DIR || path.join(REPO_ROOT, 'mod-sources');
+const DEFAULT_SAVE_FIXTURES_DIR = process.env.MELVOR_SAVE_FIXTURES_DIR || path.join(REPO_ROOT, 'save-fixtures');
 const DEFAULT_MODIO_GAME_ID = process.env.MODIO_GAME_ID || '2869';
 const DEFAULT_MODIO_GAME_API_BASE_URL = process.env.MODIO_GAME_API_BASE_URL || `https://g-${DEFAULT_MODIO_GAME_ID}.modapi.io/v1`;
 const DEFAULT_MODIO_FILE_FIELD = process.env.MODIO_FILE_FIELD || 'filedata';
@@ -43,6 +45,8 @@ const DEFAULT_GUIDES_PREFIX = process.env.MELVOR_GUIDES_PREFIX || 'Mod Creation'
 const DEFAULT_LOCAL_GUIDES_DIR = process.env.MELVOR_LOCAL_GUIDES_DIR || path.join(REPO_ROOT, 'docs', 'modding');
 const LOCAL_SOURCES = ['web', 'android-loaded'];
 const DEFAULT_MELVOR_URL = 'https://melvoridle.com/index_game.php';
+const MOD_PROFILE_STORAGE_KEYS = ['modProfiles', 'modLoadOrder', 'modActiveProfile', 'modPreferLatest', 'modDisabled'];
+const MOD_PROFILE_OVERRIDE_STORAGE_KEY = '__mcpTemporaryModProfileOverride';
 const gameSessions = new Map();
 
 const PRESETS = [
@@ -306,6 +310,43 @@ const TOOLS = [
     },
   },
   {
+    name: 'game_session_mod_profile',
+    title: 'Temporarily Configure Live Session Mods',
+    description: 'Snapshot, temporarily replace, reload, and restore the active Mod Manager profile in an existing live game session for isolated or interaction-set profiling. Applies to the browser session only and guards PlayFab mod-profile writes while temporary overrides are active.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', default: 'default' },
+        operation: {
+          type: 'string',
+          enum: ['status', 'snapshot', 'load_only', 'load_with_dependencies', 'load_set', 'restore'],
+          default: 'status',
+          description: 'status reads current Mod Manager state; snapshot stores current profile keys; load_only/load_with_dependencies/load_set replace the active profile; restore restores a stored snapshot.',
+        },
+        modId: { type: 'integer', minimum: 1, description: 'Primary installed mod.io id for load_only or load_with_dependencies.' },
+        modIds: {
+          type: 'array',
+          items: { type: 'integer', minimum: 1 },
+          description: 'Installed mod.io ids for load_set. Order is used as the requested root order before dependency expansion.',
+        },
+        additionalModIds: {
+          type: 'array',
+          items: { type: 'integer', minimum: 1 },
+          description: 'Extra installed mod.io ids to include with the primary mod for interaction profiling.',
+        },
+        includeDependencies: { type: 'boolean', default: true, description: 'For load_set, include transitive installed dependencies. load_with_dependencies always includes them; load_only does not.' },
+        allowUnresolvedDependencies: { type: 'boolean', default: false, description: 'Allow applying when a dependency id is declared but not installed.' },
+        snapshotKey: { type: 'string', default: 'default', description: 'Named in-memory snapshot for this live session.' },
+        apply: { type: 'boolean', default: false, description: 'Actually change the live browser session. False returns the plan only.' },
+        reload: { type: 'boolean', default: true, description: 'Reload the game after applying or restoring so Mod Manager loads the selected set.' },
+        loadSave: { type: 'boolean', description: 'After reload, load the configured save. Defaults to the session loadSave option.' },
+        timeoutMs: { type: 'integer', minimum: 1000, default: 90000 },
+        waitMs: { type: 'integer', minimum: 0, default: 10000 },
+        allowDuringProfile: { type: 'boolean', default: false, description: 'Allow mod profile changes while game_profile_start is active. Default blocks this because reload invalidates the profile window.' },
+      },
+    },
+  },
+  {
     name: 'creator_toolkit_local_mods',
     title: 'Manage Creator Toolkit Local Mods',
     description: 'List, add, remove, enable, or disable Creator Toolkit local mods through the browser IndexedDB localMods store. Mutations are dry-run unless apply is true.',
@@ -330,6 +371,40 @@ const TOOLS = [
         screenshot: { type: 'boolean', default: true, description: 'Save a Playwright page screenshot and JSON report.' },
         reportDir: { type: 'string', description: 'Output directory for screenshots and JSON reports. Defaults to ignored reports/.' },
         storageState: { type: 'string', description: 'Optional Playwright storage state file to reuse/save login.' },
+      },
+    },
+  },
+  {
+    name: 'game_session_local_mod',
+    title: 'Install Temporary Creator Toolkit Local Mod In Live Session',
+    description: 'Use the installed Creator Toolkit in an existing live session to install, reload, verify, and remove temporary local mods for save setup, profiling probes, and runtime debugging. Mutations are dry-run unless apply=true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', default: 'default' },
+        operation: {
+          type: 'string',
+          enum: ['status', 'install_generated', 'install_path', 'remove', 'cleanup'],
+          default: 'status',
+        },
+        name: { type: 'string', default: 'MCP Local Probe', description: 'Display name for generated or installed local mod.' },
+        namespace: { type: 'string', description: 'Namespace for generated local mod. Defaults to a safe mcp_* namespace.' },
+        setupScript: { type: 'string', description: 'JavaScript body to run inside export function setup(ctx) for install_generated.' },
+        moduleScript: { type: 'string', description: 'Full setup.mjs module text for install_generated. If omitted, setupScript is wrapped in export function setup(ctx).' },
+        manifestJson: { type: 'string', description: 'Optional manifest.json text for install_generated. Defaults to name/namespace/setup.mjs.' },
+        modPath: { type: 'string', description: 'Local mod directory containing manifest.json, or a .zip modfile, for install_path.' },
+        linkedModId: { type: 'integer', minimum: 1, description: 'Optional installed mod.io id to assign to the temporary local mod.' },
+        localModId: { type: 'integer', minimum: 1, description: 'Creator Toolkit localMods IndexedDB id for remove or targeted replacement.' },
+        replace: { type: 'boolean', default: true, description: 'Replace an existing local mod with the same namespace, linked mod id, or display name.' },
+        disabled: { type: 'boolean', default: false, description: 'Install the local mod disabled.' },
+        directoryPath: { type: 'string', description: 'Optional directory-link path metadata to preserve on the local mod record.' },
+        apply: { type: 'boolean', default: false, description: 'Actually write the Creator Toolkit localMods record or remove one. False returns the plan only.' },
+        reload: { type: 'boolean', default: true, description: 'Reload after install/remove so Creator Toolkit applies the local mod set.' },
+        loadSave: { type: 'boolean', description: 'After reload, load the configured save. Defaults to the session loadSave option.' },
+        verify: { type: 'boolean', default: true, description: 'After reload, verify by loaded mod name, namespace context, or generated marker.' },
+        timeoutMs: { type: 'integer', minimum: 1000, default: 90000 },
+        waitMs: { type: 'integer', minimum: 0, default: 10000 },
+        allowDuringProfile: { type: 'boolean', default: false, description: 'Allow local mod changes while game_profile_start is active. Default blocks this because reload invalidates the profile window.' },
       },
     },
   },
@@ -484,6 +559,35 @@ const TOOLS = [
       properties: {
         sessionId: { type: 'string', default: 'default' },
         maxBrowserEvents: { type: 'integer', minimum: 0, default: 50 },
+      },
+    },
+  },
+  {
+    name: 'game_session_save',
+    title: 'Manage Live Session Save Fixtures',
+    description: 'Inspect local/cloud save slots, export named ignored save fixtures, import fixtures into local test slots, and load slot or fixture saves in an existing live session. Fixture writes and local slot writes are dry-run unless apply=true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', default: 'default' },
+        operation: {
+          type: 'string',
+          enum: ['status', 'list_slots', 'list_fixtures', 'export_slot', 'export_current', 'write_fixture', 'import_fixture', 'load_slot', 'load_fixture'],
+          default: 'status',
+        },
+        fixture: { type: 'string', description: 'Named save fixture. Stored as <fixture>.json under ignored save-fixtures/.' },
+        saveDir: { type: 'string', description: 'Directory for ignored save fixtures. Defaults to save-fixtures/.' },
+        saveSource: { type: 'string', enum: ['cloud', 'local'], default: 'local' },
+        saveSlot: { type: 'integer', minimum: 0, description: 'Source slot for export_slot or load_slot. Defaults to MELVOR_TEST_CHARACTER_SLOT when configured.' },
+        targetSlot: { type: 'integer', minimum: 0, description: 'Local slot to write when importing or loading a fixture.' },
+        saveString: { type: 'string', description: 'Raw Melvor exported save string for write_fixture. The tool validates it and never echoes it back.' },
+        notes: { type: 'string', description: 'Optional notes stored with exported/written fixture metadata.' },
+        overwriteLocalSlot: { type: 'boolean', default: false, description: 'Allow import_fixture/load_fixture to overwrite a non-empty local save slot.' },
+        apply: { type: 'boolean', default: false, description: 'Actually write fixture files or local test slots. False returns the plan only.' },
+        loadAfterImport: { type: 'boolean', default: false, description: 'After import_fixture, reload and load the target local slot.' },
+        reload: { type: 'boolean', default: true, description: 'Reload before loading a slot or fixture so character selection globals are fresh.' },
+        timeoutMs: { type: 'integer', minimum: 1000, default: 90000 },
+        waitMs: { type: 'integer', minimum: 0, default: 10000 },
       },
     },
   },
@@ -716,6 +820,18 @@ function numericFloat(value, fallback, min, max = Number.POSITIVE_INFINITY) {
     throw new Error(`Expected number between ${min} and ${max}`);
   }
   return parsed;
+}
+
+function uniqueIntegerIds(values = []) {
+  const seen = new Set();
+  const ids = [];
+  for (const value of values || []) {
+    const id = Number(value);
+    if (!Number.isInteger(id) || id < 1 || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
 }
 
 
@@ -1407,6 +1523,9 @@ const GUIDE_USE_CASES = [
   { question: 'How should a mod handle offline processing?', tool: 'melvor_modding_guides_search', query: 'offlineLoopEntered loadingOfflineProgress OfflineLoadingElement' },
   { question: 'How can I trigger offline processing in a live test session?', tool: 'game_session_time_skip', hours: 1 },
   { question: 'How do I profile browser performance in a live session?', tool: 'game_profile_start', query: 'CDP CPU profile browser metrics long tasks heap trace' },
+  { question: 'How do I temporarily profile one installed mod or an interaction set?', tool: 'game_session_mod_profile', operation: 'load_with_dependencies' },
+  { question: 'How do I test a mod with a known save state?', tool: 'game_session_save', operation: 'list_fixtures' },
+  { question: 'How do I load temporary local test code through Creator Toolkit?', tool: 'game_session_local_mod', operation: 'install_generated' },
   { question: 'How do local Creator Toolkit mods load?', tool: 'melvor_modding_guides_read', page: 'creator-toolkit-local-mods' },
   { question: 'How do I test a mod safely in the browser?', tool: 'melvor_modding_guides_read', page: 'live-game-sessions' },
   { question: 'How do I debug a live UI mismatch?', tool: 'melvor_modding_guides_read', page: 'live-debugging-patterns' },
@@ -1438,6 +1557,18 @@ const MCP_CONTEXT = {
     {
       tool: 'game_session_time_skip',
       use: 'Trigger Melvor offline processing in a loaded read-only live session using game.testForOffline(hours).',
+    },
+    {
+      tool: 'game_session_save',
+      use: 'Manage ignored save fixtures and load known local/cloud save states in a live browser session.',
+    },
+    {
+      tool: 'game_session_local_mod',
+      use: 'Install generated or local-path Creator Toolkit local mods into the live browser session for save setup, profiling probes, and runtime debugging.',
+    },
+    {
+      tool: 'game_session_mod_profile',
+      use: 'Temporarily replace a live session Mod Manager profile with one mod, one mod plus dependencies, or an explicit interaction set before profiling.',
     },
     {
       tool: 'game_profile_start',
@@ -1483,9 +1614,9 @@ const MCP_CONTEXT = {
     },
     {
       area: 'Saves, cloud, local testing, and Mod Manager',
-      knowsAbout: ['read-only browser save guards', 'local/cloud save loading', 'Creator Toolkit local mods', 'optional fetching and searching of installed Mod Manager mod resources', 'mod.io active/inactive release safety'],
+      knowsAbout: ['read-only browser save guards', 'local/cloud save loading', 'ignored save fixtures under save-fixtures/', 'Creator Toolkit local mods', 'temporary generated local mods through game_session_local_mod', 'optional fetching and searching of installed Mod Manager mod resources', 'temporary live-session Mod Manager profiles for profiling', 'mod.io active/inactive release safety'],
       docs: ['creator-toolkit-local-mods', 'game-save-browser-tests', 'live-game-sessions'],
-      searches: ['Creator Toolkit IndexedDB local mods', 'mod_manager_fetch_sources mod_source_search', 'read-only save guards game_save_test', 'inactive mod.io upload'],
+      searches: ['Creator Toolkit IndexedDB local mods', 'game_session_local_mod generated local probes Creator Toolkit', 'mod_manager_fetch_sources mod_source_search', 'game_session_save save fixtures local cloud slots', 'game_session_mod_profile temporary profile dependencies profiling', 'read-only save guards game_save_test', 'inactive mod.io upload'],
     },
   ],
   packagedDocs: Object.entries(LOCAL_GUIDE_HINTS).map(([file, summary]) => ({
@@ -1505,7 +1636,10 @@ const MCP_CONTEXT = {
     'Bank bankTabMenu bank items tabs',
     'EquipmentItem equipment sets combat stats',
     'Creator Toolkit IndexedDB local mods',
+    'game_session_local_mod generated local probes Creator Toolkit',
     'mod_manager_fetch_sources mod_source_search installed mods',
+    'game_session_save save fixtures local cloud slots',
+    'game_session_mod_profile temporary profile dependencies profiling',
     'read-only save guards game_session_start game_save_test',
     'bare globals globalThis structured console evidence',
   ],
@@ -1517,6 +1651,9 @@ const MCP_CONTEXT = {
     'Use packaged local-mod-writing-patterns even on a fresh machine with no local mods; it is standalone guidance distilled into the repo.',
     'Use game_source_download for raw local source, game_source_beautify only when a readable copy is needed, and game_source_search/read for exact source symbols and implementation checks.',
     'Use mod_manager_fetch_sources, then mod_source_search/read, when comparing against installed mods.',
+    'Use game_session_save to list save slots, export ignored save fixtures, import them into local test slots, and load known save states.',
+    'Use game_session_local_mod to install temporary generated or local-path Creator Toolkit mods into the same browser session for setup code, probes, or profiling shims.',
+    'Use game_session_mod_profile before profiling when you need a temporary one-mod, dependency-closed, or interaction-set Mod Manager profile in a live browser session.',
     'Use game_session_time_skip in a loaded read-only live session to exercise offline processing without waiting in real time.',
     'Use game_profile_start/read/mark/stop to collect browser performance traces, CPU samples, Chrome metric deltas, heap usage, long tasks, and scenario marks.',
     'Use live game session tools when the question depends on runtime state, rendered UI, mod interactions, or browser globals.',
@@ -1529,6 +1666,9 @@ const MCP_SERVER_INSTRUCTIONS = [
   'Use packaged docs and official wiki guide access for how Melvor works internally, new mod setup, source layout, mod loader/context API, lifecycle hooks, offline processing, UI/custom elements, bank/items/equipment/combat topics, Creator Toolkit local mods, live debugging, and safe save/release testing.',
   'Use game_source_download for raw local game source. Use game_source_beautify only when a readable copy is needed; it must not replace raw source as ground truth.',
   'Use mod_manager_fetch_sources to export installed Mod Manager mods locally, then mod_source_search/read to compare against those downloaded mod sources.',
+  'Use game_session_save in live sessions to manage ignored save fixtures and load known save states for repeatable testing; actual writes require apply=true.',
+  'Use game_session_local_mod when temporary test code should run through the installed Creator Toolkit in the current live session; actual local mod writes require apply=true.',
+  'Use game_session_mod_profile to temporarily change a live session Mod Manager profile for isolated or interaction-set profiling; actual changes require apply=true and can be restored from the in-memory snapshot.',
   'Use game_session_time_skip in read-only live sessions to exercise offline-processing behavior through game.testForOffline(hours).',
   'Use game_profile_start/read/mark/stop in live sessions when performance needs structured browser evidence such as CDP CPU profiles, Chrome metrics, heap usage, long tasks, and Playwright traces.',
   'For exact implementation details, search/read local game source. For rendered behavior or mod conflicts, start a read-only game session and gather structured evidence.',
@@ -1900,6 +2040,232 @@ function pathInsideRoot(root, target) {
   const resolvedTarget = path.resolve(target);
   const rootWithSep = resolvedRoot.endsWith(path.sep) ? resolvedRoot : `${resolvedRoot}${path.sep}`;
   return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(rootWithSep);
+}
+
+function slug(value) {
+  return String(value || 'mod')
+    .trim()
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'mod';
+}
+
+function modResourceType(resourcePath) {
+  const lower = String(resourcePath || '').toLowerCase();
+  if (lower.endsWith('.js') || lower.endsWith('.mjs')) return 'text/javascript';
+  if (lower.endsWith('.json')) return 'application/json';
+  if (lower.endsWith('.css')) return 'text/css';
+  if (lower.endsWith('.html')) return 'text/html';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.svg')) return 'image/svg+xml';
+  return '';
+}
+
+function safeResourcePath(value) {
+  const normalized = String(value || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!normalized || normalized.includes('\0')) throw new Error(`Invalid local mod resource path: ${value}`);
+  const parts = normalized.split('/');
+  if (parts.some((part) => part === '..' || part === '.' || part === '')) {
+    throw new Error(`Unsafe local mod resource path: ${value}`);
+  }
+  return normalized;
+}
+
+function shouldSkipLocalModPath(relativePath) {
+  const parts = relativePath.split('/');
+  return parts.includes('.git') || parts.includes('node_modules') || parts.includes('.DS_Store') || relativePath === '.modignore';
+}
+
+async function readModIgnore(root) {
+  const ignorePath = path.join(root, '.modignore');
+  if (!fs.existsSync(ignorePath)) return [];
+  const text = await fsp.readFile(ignorePath, 'utf8');
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#') && !line.startsWith('!'));
+}
+
+function matchesIgnorePattern(relativePath, pattern) {
+  const normalizedPattern = pattern.replace(/\\/g, '/').replace(/^\/+/, '');
+  const normalizedPath = relativePath.replace(/\\/g, '/');
+  if (!normalizedPattern) return false;
+  if (normalizedPattern.endsWith('/')) return normalizedPath.startsWith(normalizedPattern);
+  if (!normalizedPattern.includes('/')) return normalizedPath.split('/').includes(normalizedPattern);
+  return normalizedPath === normalizedPattern || normalizedPath.startsWith(`${normalizedPattern}/`);
+}
+
+async function collectLocalModFiles(root, currentDir, patterns, files = []) {
+  const entries = await fsp.readdir(currentDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const absolutePath = path.join(currentDir, entry.name);
+    const relativePath = safeResourcePath(path.relative(root, absolutePath).replace(/\\/g, '/'));
+    if (shouldSkipLocalModPath(relativePath) || patterns.some((pattern) => matchesIgnorePattern(relativePath, pattern))) continue;
+    if (entry.isDirectory()) {
+      await collectLocalModFiles(root, absolutePath, patterns, files);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    const buffer = await fsp.readFile(absolutePath);
+    files.push({
+      path: relativePath,
+      type: modResourceType(relativePath),
+      size: buffer.length,
+      base64: buffer.toString('base64'),
+    });
+  }
+  return files.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function parseManifestText(text, label) {
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new Error(`${label} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function validateLocalManifest(manifest) {
+  if (!manifest || typeof manifest !== 'object') throw new Error('manifest.json must contain a JSON object.');
+  if (manifest.namespace) {
+    if (!/^(?!melvor)[A-Za-z_][A-Za-z0-9_]*$/i.test(manifest.namespace)) {
+      throw new Error('manifest.namespace must contain only alphanumeric characters and underscores and cannot start with "melvor".');
+    }
+    if (manifest.namespace === 'dev') throw new Error('manifest.namespace "dev" is reserved.');
+  }
+  if (!manifest.setup && !manifest.load) throw new Error('manifest.json must define either setup or load.');
+  const validLoadResource = (resource) =>
+    typeof resource === 'string' &&
+    (resource.endsWith('.js') || resource.endsWith('.mjs') || resource.endsWith('.css') || resource.endsWith('.json') || resource.endsWith('.html'));
+  if (manifest.setup && !(typeof manifest.setup === 'string' && (manifest.setup.endsWith('.js') || manifest.setup.endsWith('.mjs')))) {
+    throw new Error('manifest.setup must be a .js or .mjs resource.');
+  }
+  if (manifest.load && !(typeof manifest.load === 'string' ? validLoadResource(manifest.load) : Array.isArray(manifest.load) && manifest.load.every(validLoadResource))) {
+    throw new Error('manifest.load must be a valid resource path or array of resource paths.');
+  }
+  if (manifest.icon && !(typeof manifest.icon === 'string' && (manifest.icon.endsWith('.png') || manifest.icon.endsWith('.svg')))) {
+    throw new Error('manifest.icon must be a .png or .svg resource.');
+  }
+}
+
+function safeGeneratedNamespace(value, fallbackName) {
+  const raw = String(value || fallbackName || 'mcp_local_probe')
+    .replace(/[^A-Za-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  let namespace = raw || 'mcp_local_probe';
+  if (!/^[A-Za-z_]/.test(namespace)) namespace = `mcp_${namespace}`;
+  if (/^melvor/i.test(namespace)) namespace = `mcp_${namespace}`;
+  if (namespace === 'dev') namespace = 'mcp_dev';
+  return namespace.slice(0, 64);
+}
+
+function generatedSetupModule({ namespace, name, setupScript }) {
+  return `export function setup(ctx) {
+  const marker = {
+    namespace: ${JSON.stringify(namespace)},
+    name: ${JSON.stringify(name)},
+    loadedAt: new Date().toISOString()
+  };
+  globalThis.__mcpLocalModLoaded = marker;
+  globalThis.__mcpLocalModShenanigans = globalThis.__mcpLocalModShenanigans || {};
+  globalThis.__mcpLocalModShenanigans[${JSON.stringify(namespace)}] = marker;
+  try {
+${String(setupScript || '').split(/\r?\n/).map((line) => `    ${line}`).join('\n')}
+  } catch (error) {
+    marker.error = error instanceof Error ? error.message : String(error);
+    console.error('[MCP local mod] setup failed', error);
+    throw error;
+  }
+}
+`;
+}
+
+function textFile(pathValue, text, type = '') {
+  return {
+    path: safeResourcePath(pathValue),
+    type: type || modResourceType(pathValue),
+    size: Buffer.byteLength(String(text)),
+    base64: Buffer.from(String(text)).toString('base64'),
+  };
+}
+
+async function buildGeneratedLocalModInput(args = {}) {
+  const name = String(args.name || 'MCP Local Probe');
+  const namespace = safeGeneratedNamespace(args.namespace, name);
+  const manifest = args.manifestJson
+    ? parseManifestText(String(args.manifestJson), 'manifestJson')
+    : {
+        name,
+        namespace,
+        version: '0.0.0',
+        setup: 'setup.mjs',
+      };
+  if (!manifest.name) manifest.name = name;
+  if (!manifest.namespace) manifest.namespace = namespace;
+  if (!manifest.setup) manifest.setup = 'setup.mjs';
+  validateLocalManifest(manifest);
+  const setupText = args.moduleScript
+    ? String(args.moduleScript)
+    : generatedSetupModule({ namespace: manifest.namespace, name: manifest.name, setupScript: args.setupScript || '' });
+  const files = [
+    textFile('manifest.json', `${JSON.stringify(manifest, null, 2)}\n`, 'application/json'),
+    textFile(manifest.setup, setupText, modResourceType(manifest.setup)),
+  ];
+  return {
+    kind: 'directory',
+    files,
+    manifest,
+    packageName: `${slug(name)}.zip`,
+    requestedName: name,
+    directoryPath: args.directoryPath || '',
+    disabled: Boolean(args.disabled),
+    linkedModId: args.linkedModId === undefined ? null : numeric(args.linkedModId, undefined, 1),
+    localModId: args.localModId === undefined ? null : numeric(args.localModId, undefined, 1),
+    replace: args.replace !== false,
+    generated: true,
+  };
+}
+
+async function buildPathLocalModInput(args = {}) {
+  if (!args.modPath) throw new Error('game_session_local_mod install_path requires modPath.');
+  const modPath = path.resolve(String(args.modPath));
+  const stat = await fsp.stat(modPath).catch(() => null);
+  if (!stat) throw new Error(`Local mod path does not exist: ${modPath}`);
+  const common = {
+    directoryPath: args.directoryPath || '',
+    disabled: Boolean(args.disabled),
+    linkedModId: args.linkedModId === undefined ? null : numeric(args.linkedModId, undefined, 1),
+    localModId: args.localModId === undefined ? null : numeric(args.localModId, undefined, 1),
+    replace: args.replace !== false,
+    requestedName: args.name || '',
+    sourcePath: modPath,
+  };
+  if (stat.isDirectory()) {
+    const manifestPath = path.join(modPath, 'manifest.json');
+    if (!fs.existsSync(manifestPath)) throw new Error(`Local mod directory has no manifest.json: ${modPath}`);
+    const manifest = parseManifestText(await fsp.readFile(manifestPath, 'utf8'), manifestPath);
+    validateLocalManifest(manifest);
+    const patterns = await readModIgnore(modPath);
+    const files = await collectLocalModFiles(modPath, modPath, patterns);
+    if (!files.some((file) => file.path === 'manifest.json')) throw new Error('Local mod package must include manifest.json.');
+    return {
+      ...common,
+      kind: 'directory',
+      files,
+      manifest,
+      packageName: `${slug(args.name || path.basename(modPath))}.zip`,
+    };
+  }
+  if (!stat.isFile()) throw new Error(`Local mod path must be a directory or zip file: ${modPath}`);
+  if (path.extname(modPath).toLowerCase() !== '.zip') throw new Error(`Local mod path must be a directory or .zip file: ${modPath}`);
+  const buffer = await fsp.readFile(modPath);
+  return {
+    ...common,
+    kind: 'zip',
+    packageBase64: buffer.toString('base64'),
+    packageName: path.basename(modPath),
+    size: buffer.length,
+  };
 }
 
 async function readFetchedModEntry(root, dirent) {
@@ -2500,7 +2866,8 @@ async function installReadOnlySaveGuard(page) {
       };
     }
 
-    const storageSetItem = Storage.prototype.setItem;
+    const storageSetItem = globalThis.__mcpOriginalStorageSetItem || Storage.prototype.setItem;
+    globalThis.__mcpOriginalStorageSetItem = storageSetItem;
     Storage.prototype.setItem = function guardedSetItem(key, value) {
       const stringKey = String(key);
       if (/^MI-(?:test-|beta-)?\d+-.*saveGame$/.test(stringKey)) {
@@ -2679,6 +3046,1110 @@ async function collectGameSessionState(session, args = {}) {
   };
 }
 
+function resolveSaveFixturesDir(saveDir) {
+  return path.resolve(saveDir || DEFAULT_SAVE_FIXTURES_DIR);
+}
+
+function safeSaveFixtureName(name) {
+  const value = String(name || '').trim();
+  if (!value) throw new Error('Save fixture name is required.');
+  if (!/^[A-Za-z0-9._-]+$/.test(value)) {
+    throw new Error('Save fixture names may only contain letters, numbers, dot, underscore, and hyphen.');
+  }
+  if (value === '.' || value === '..') throw new Error('Invalid save fixture name.');
+  return value.replace(/\.json$/i, '');
+}
+
+function saveFixturePath(saveDir, fixture) {
+  const root = resolveSaveFixturesDir(saveDir);
+  const filePath = path.join(root, `${safeSaveFixtureName(fixture)}.json`);
+  if (!pathInsideRoot(root, filePath)) throw new Error('Save fixture path escapes the save fixture directory.');
+  return { root, filePath };
+}
+
+function saveStringHash(saveString) {
+  return crypto.createHash('sha256').update(String(saveString)).digest('hex');
+}
+
+function redactSaveFixture(fixture) {
+  if (!fixture) return fixture;
+  const { saveString, ...rest } = fixture;
+  return {
+    ...rest,
+    saveStringBytes: String(saveString || '').length,
+    saveStringSha256: saveString ? saveStringHash(saveString) : null,
+  };
+}
+
+async function listSaveFixtures(saveDir) {
+  const root = resolveSaveFixturesDir(saveDir);
+  if (!fs.existsSync(root)) return { root, fixtures: [] };
+  const entries = await fsp.readdir(root, { withFileTypes: true });
+  const fixtures = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+    const filePath = path.join(root, entry.name);
+    try {
+      const parsed = JSON.parse(await fsp.readFile(filePath, 'utf8'));
+      fixtures.push({
+        file: entry.name,
+        path: filePath,
+        ...redactSaveFixture(parsed),
+      });
+    } catch (error) {
+      fixtures.push({
+        file: entry.name,
+        path: filePath,
+        unreadable: true,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  fixtures.sort((a, b) => String(a.name || a.file).localeCompare(String(b.name || b.file)));
+  return { root, fixtures };
+}
+
+async function readSaveFixture(saveDir, fixtureName) {
+  const { root, filePath } = saveFixturePath(saveDir, fixtureName);
+  const parsed = JSON.parse(await fsp.readFile(filePath, 'utf8'));
+  if (!parsed.saveString || typeof parsed.saveString !== 'string') {
+    throw new Error(`Save fixture "${fixtureName}" does not contain a saveString.`);
+  }
+  return { root, filePath, fixture: parsed };
+}
+
+async function writeSaveFixture(saveDir, fixtureName, fixture) {
+  const { root, filePath } = saveFixturePath(saveDir, fixtureName);
+  await fsp.mkdir(root, { recursive: true });
+  await fsp.writeFile(filePath, `${JSON.stringify(fixture, null, 2)}\n`);
+  return { root, filePath, fixture: redactSaveFixture(fixture) };
+}
+
+async function readSaveSlots(session) {
+  return await session.page.evaluate(async () => {
+    function serializeHeader(header) {
+      if (typeof header === 'number') {
+        const statuses = {
+          0: 'empty',
+          1: 'corrupt',
+          2: 'invalidVersion',
+        };
+        return { status: statuses[header] || 'error', code: header };
+      }
+      if (!header) return { status: 'missing' };
+      return {
+        status: 'ok',
+        saveVersion: header.saveVersion ?? null,
+        characterName: header.characterName || null,
+        currentGamemode: header.currentGamemode
+          ? { id: header.currentGamemode.id || null, name: header.currentGamemode.name || null }
+          : null,
+        totalSkillLevel: header.totalSkillLevel ?? null,
+        gp: header.gp ?? null,
+        offlineAction: header.offlineAction ? { id: header.offlineAction.id || null, name: header.offlineAction.name || null } : null,
+        tickTimestamp: header.tickTimestamp ?? null,
+        saveTimestamp: header.saveTimestamp ?? null,
+        activeNamespaces: Array.isArray(header.activeNamespaces) ? header.activeNamespaces : [],
+        modProfile: header.modProfile || null,
+      };
+    }
+
+    if (typeof updateLocalSaveHeaders === 'function') await updateLocalSaveHeaders().catch(() => {});
+    if (typeof updateCloudSaveHeaders === 'function') await updateCloudSaveHeaders().catch(() => {});
+
+    const localHeaders = typeof localSaveHeaders !== 'undefined' ? localSaveHeaders : [];
+    const cloudHeaders = typeof cloudSaveHeaders !== 'undefined' ? cloudSaveHeaders : [];
+    const maxSlots = typeof maxSaveSlots === 'number' ? maxSaveSlots : Math.max(localHeaders.length || 0, cloudHeaders.length || 0);
+    const local = [];
+    const cloud = [];
+    for (let slot = 0; slot < maxSlots; slot += 1) {
+      local.push({ slot, ...serializeHeader(localHeaders[slot]) });
+      cloud.push({ slot, ...serializeHeader(cloudHeaders[slot]) });
+    }
+    return {
+      maxSaveSlots: maxSlots,
+      currentCharacter: typeof currentCharacter !== 'undefined' ? currentCharacter : null,
+      inCharacterSelection: typeof inCharacterSelection !== 'undefined' ? Boolean(inCharacterSelection) : null,
+      gameLoaded: typeof isLoaded !== 'undefined' ? Boolean(isLoaded) : false,
+      local,
+      cloud,
+    };
+  });
+}
+
+async function readSaveStringFromSlot(session, saveSource, saveSlot) {
+  return await session.page.evaluate(
+    async ({ saveSource, saveSlot }) => {
+      function serializeHeader(header) {
+        if (typeof header === 'number') return { status: 'error', code: header };
+        if (!header) return { status: 'missing' };
+        return {
+          status: 'ok',
+          saveVersion: header.saveVersion ?? null,
+          characterName: header.characterName || null,
+          currentGamemode: header.currentGamemode
+            ? { id: header.currentGamemode.id || null, name: header.currentGamemode.name || null }
+            : null,
+          totalSkillLevel: header.totalSkillLevel ?? null,
+          gp: header.gp ?? null,
+          tickTimestamp: header.tickTimestamp ?? null,
+          saveTimestamp: header.saveTimestamp ?? null,
+          activeNamespaces: Array.isArray(header.activeNamespaces) ? header.activeNamespaces : [],
+          modProfile: header.modProfile || null,
+        };
+      }
+      let saveString = '';
+      if (saveSource === 'cloud') {
+        if (typeof cloudManager === 'undefined' || typeof cloudManager.getPlayFabSave !== 'function') {
+          throw new Error('cloudManager.getPlayFabSave is not available.');
+        }
+        saveString = cloudManager.getPlayFabSave(saveSlot);
+      } else {
+        if (typeof getLocalSaveString !== 'function') throw new Error('getLocalSaveString is not available.');
+        saveString = await getLocalSaveString(true, saveSlot);
+      }
+      if (!saveString) throw new Error(`${saveSource} save slot ${saveSlot} is empty.`);
+      const header = await game.getHeaderFromSaveString(saveString);
+      if (typeof header === 'number') throw new Error(`${saveSource} save slot ${saveSlot} is not valid; header code ${header}.`);
+      return { saveString, header: serializeHeader(header) };
+    },
+    { saveSource, saveSlot }
+  );
+}
+
+async function readCurrentSaveString(session) {
+  return await session.page.evaluate(async () => {
+    function serializeHeader(header) {
+      if (typeof header === 'number') return { status: 'error', code: header };
+      if (!header) return { status: 'missing' };
+      return {
+        status: 'ok',
+        saveVersion: header.saveVersion ?? null,
+        characterName: header.characterName || null,
+        currentGamemode: header.currentGamemode
+          ? { id: header.currentGamemode.id || null, name: header.currentGamemode.name || null }
+          : null,
+        totalSkillLevel: header.totalSkillLevel ?? null,
+        gp: header.gp ?? null,
+        tickTimestamp: header.tickTimestamp ?? null,
+        saveTimestamp: header.saveTimestamp ?? null,
+        activeNamespaces: Array.isArray(header.activeNamespaces) ? header.activeNamespaces : [],
+        modProfile: header.modProfile || null,
+      };
+    }
+    if (typeof game === 'undefined' || typeof game.generateSaveString !== 'function') {
+      throw new Error('A loaded game with game.generateSaveString is required.');
+    }
+    if (typeof isLoaded !== 'undefined' && !isLoaded) throw new Error('No save is currently loaded.');
+    const saveString = game.generateSaveString();
+    const header = await game.getHeaderFromSaveString(saveString);
+    if (typeof header === 'number') throw new Error(`Generated current save was invalid; header code ${header}.`);
+    return {
+      saveString,
+      header: serializeHeader(header),
+      currentCharacter: typeof currentCharacter !== 'undefined' ? currentCharacter : null,
+    };
+  });
+}
+
+async function validateSaveStringInSession(session, saveString) {
+  return await session.page.evaluate(async (saveString) => {
+    function serializeHeader(header) {
+      if (typeof header === 'number') return { status: 'error', code: header };
+      if (!header) return { status: 'missing' };
+      return {
+        status: 'ok',
+        saveVersion: header.saveVersion ?? null,
+        characterName: header.characterName || null,
+        currentGamemode: header.currentGamemode
+          ? { id: header.currentGamemode.id || null, name: header.currentGamemode.name || null }
+          : null,
+        totalSkillLevel: header.totalSkillLevel ?? null,
+        gp: header.gp ?? null,
+        tickTimestamp: header.tickTimestamp ?? null,
+        saveTimestamp: header.saveTimestamp ?? null,
+        activeNamespaces: Array.isArray(header.activeNamespaces) ? header.activeNamespaces : [],
+        modProfile: header.modProfile || null,
+      };
+    }
+    const header = await game.getHeaderFromSaveString(saveString);
+    if (typeof header === 'number') throw new Error(`Save string is invalid; header code ${header}.`);
+    return serializeHeader(header);
+  }, String(saveString || ''));
+}
+
+async function writeSaveStringToLocalSlot(session, saveString, targetSlot, overwriteLocalSlot = false) {
+  return await session.page.evaluate(
+    async ({ saveString, targetSlot, overwriteLocalSlot }) => {
+      function serializeHeader(header) {
+        if (typeof header === 'number') return { status: 'error', code: header };
+        if (!header) return { status: 'missing' };
+        return {
+          status: 'ok',
+          saveVersion: header.saveVersion ?? null,
+          characterName: header.characterName || null,
+          currentGamemode: header.currentGamemode
+            ? { id: header.currentGamemode.id || null, name: header.currentGamemode.name || null }
+            : null,
+          totalSkillLevel: header.totalSkillLevel ?? null,
+          gp: header.gp ?? null,
+          tickTimestamp: header.tickTimestamp ?? null,
+          saveTimestamp: header.saveTimestamp ?? null,
+          activeNamespaces: Array.isArray(header.activeNamespaces) ? header.activeNamespaces : [],
+          modProfile: header.modProfile || null,
+        };
+      }
+      if (typeof getKeyForSaveSlot !== 'function') throw new Error('getKeyForSaveSlot is not available.');
+      const header = await game.getHeaderFromSaveString(saveString);
+      if (typeof header === 'number') throw new Error(`Save string is invalid; header code ${header}.`);
+      const keyPrefix = getKeyForSaveSlot(targetSlot);
+      const key = `${keyPrefix}saveGame`;
+      const existing = localStorage.getItem(key);
+      if (existing && !overwriteLocalSlot) {
+        const existingHeader = await game.getHeaderFromSaveString(existing).catch(() => null);
+        throw new Error(
+          `Local save slot ${targetSlot} is not empty (${serializeHeader(existingHeader).characterName || 'unknown'}). Pass overwriteLocalSlot=true to replace it.`
+        );
+      }
+      const originalSetItem = globalThis.__mcpOriginalStorageSetItem || Storage.prototype.setItem;
+      originalSetItem.call(localStorage, key, saveString);
+      if (typeof updateLocalSaveHeaders === 'function') await updateLocalSaveHeaders().catch(() => {});
+      return {
+        targetSlot,
+        key,
+        overwritten: Boolean(existing),
+        header: serializeHeader(header),
+      };
+    },
+    { saveString, targetSlot, overwriteLocalSlot: Boolean(overwriteLocalSlot) }
+  );
+}
+
+async function reloadAndLoadSaveSlot(session, args = {}) {
+  const saveSlot = numeric(args.saveSlot, undefined, 0);
+  const saveSource = args.saveSource || 'local';
+  const options = {
+    ...session.options,
+    saveSlot,
+    saveSource,
+    timeoutMs: numeric(args.timeoutMs, session.options.timeoutMs || 90000, 1000),
+    waitMs: numeric(args.waitMs, session.options.waitMs || 10000, 0),
+  };
+  if (args.reload !== false) {
+    await gotoAndSettle(session.page, options.url, options.timeoutMs);
+    await waitForModManager(session.page, options, { navigate: false });
+  }
+  const load = await loadGameSaveInSession(session.page, options);
+  session.load = load;
+  const state = await collectGameSessionState(session, { maxBrowserEvents: 50 });
+  return {
+    load,
+    state,
+    slots: await readSaveSlots(session).catch(() => null),
+  };
+}
+
+function fixtureForSaveString({ fixtureName, saveString, header, source, notes }) {
+  return {
+    schemaVersion: 1,
+    name: fixtureName,
+    createdAt: new Date().toISOString(),
+    source,
+    notes: notes || '',
+    header,
+    saveString,
+    saveStringSha256: saveStringHash(saveString),
+    saveStringBytes: String(saveString).length,
+  };
+}
+
+async function readLiveModProfileState(session) {
+  const state = await session.page.evaluate(
+    async ({ storageKeys, overrideKey }) => {
+      function getAllFromIndexedDB(dbName, storeName) {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open(dbName);
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            const db = request.result;
+            const tx = db.transaction(storeName, 'readonly');
+            const store = tx.objectStore(storeName);
+            const getAll = store.getAll();
+            getAll.onerror = () => reject(getAll.error);
+            getAll.onsuccess = () => {
+              db.close();
+              resolve(getAll.result || []);
+            };
+          };
+        });
+      }
+
+      function parseJsonValue(value, fallback) {
+        if (!value) return fallback;
+        try {
+          return JSON.parse(value);
+        } catch {
+          return fallback;
+        }
+      }
+
+      function uniqueNumbers(values) {
+        const seen = new Set();
+        const output = [];
+        for (const value of values || []) {
+          const parsed = Number(value);
+          if (!Number.isInteger(parsed) || parsed < 1 || seen.has(parsed)) continue;
+          seen.add(parsed);
+          output.push(parsed);
+        }
+        return output;
+      }
+
+      function dependencyId(dependency) {
+        if (typeof dependency === 'number' || typeof dependency === 'string') return Number(dependency);
+        if (!dependency || typeof dependency !== 'object') return NaN;
+        return Number(dependency.id ?? dependency.mod_id ?? dependency.modId ?? dependency.modio_id ?? dependency.modioId);
+      }
+
+      function dependencyIds(dependencies) {
+        return uniqueNumbers((dependencies || []).map(dependencyId));
+      }
+
+      const rawValues = {};
+      for (const key of storageKeys) rawValues[key] = localStorage.getItem(key);
+
+      const manager = typeof mod !== 'undefined' ? mod.manager : null;
+      const activeProfile = manager?.activeProfile || null;
+      const loadedNames = manager?.getLoadedModList?.() || [];
+      let override = parseJsonValue(localStorage.getItem(overrideKey), null);
+      if (!override || typeof override !== 'object') override = null;
+
+      let profiles = parseJsonValue(rawValues.modProfiles, null);
+      if (!Array.isArray(profiles)) profiles = activeProfile ? [activeProfile] : [];
+      profiles = profiles.map((profile) => ({
+        ...profile,
+        mods: uniqueNumbers(profile.mods || []),
+        autoEnable: Boolean(profile.autoEnable),
+      }));
+
+      const loadOrder = uniqueNumbers(parseJsonValue(rawValues.modLoadOrder, []));
+      const activeProfileId = rawValues.modActiveProfile ?? activeProfile?.id ?? profiles[0]?.id ?? null;
+      const storedMods = await getAllFromIndexedDB('melvordb', 'mods');
+      const activeProfileModIds = new Set((activeProfile?.mods || []).map((id) => String(id)));
+      const installedMods = storedMods.map((stored) => ({
+        id: Number(stored.id),
+        name: stored.name || '',
+        namespace: stored.namespace || null,
+        version: stored.version || null,
+        dependencyIds: dependencyIds(stored.dependencies || []),
+        inActiveProfile: activeProfileModIds.has(String(stored.id)),
+        loaded: loadedNames.includes(stored.name),
+      }));
+
+      return {
+        location: location.href,
+        title: document.title,
+        rawValues,
+        override,
+        profiles,
+        loadOrder,
+        activeProfile,
+        activeProfileId,
+        loadedNames,
+        installedMods,
+        modManager: {
+          isEnabled: Boolean(manager?.isEnabled?.()),
+          isProcessing: Boolean(manager?.isProcessing?.()),
+          hasChanges: Boolean(manager?.hasChanges?.()),
+        },
+      };
+    },
+    { storageKeys: MOD_PROFILE_STORAGE_KEYS, overrideKey: MOD_PROFILE_OVERRIDE_STORAGE_KEY }
+  );
+  return {
+    ...state,
+    snapshotKeys: [...(session.modProfileSnapshots?.keys?.() || [])],
+    temporaryOverrideActive: Boolean(state.override?.values),
+  };
+}
+
+function normalizeSnapshotKey(value) {
+  return String(value || 'default').trim() || 'default';
+}
+
+function compactModInfo(mod) {
+  if (!mod) return null;
+  return {
+    id: mod.id,
+    name: mod.name,
+    namespace: mod.namespace,
+    version: mod.version,
+    dependencyIds: mod.dependencyIds || [],
+  };
+}
+
+function storeModProfileSnapshot(session, key, state) {
+  if (!session.modProfileSnapshots) session.modProfileSnapshots = new Map();
+  const snapshot = {
+    key,
+    capturedAt: new Date().toISOString(),
+    rawValues: { ...state.rawValues },
+    activeProfile: state.activeProfile || null,
+    activeProfileId: state.activeProfileId ?? null,
+    profiles: state.profiles,
+    loadOrder: state.loadOrder,
+    loadedNames: state.loadedNames,
+    installedMods: state.installedMods.map(compactModInfo),
+  };
+  session.modProfileSnapshots.set(key, snapshot);
+  return snapshot;
+}
+
+function computeModProfilePlan(state, args = {}) {
+  const operation = args.operation || 'status';
+  const installedById = new Map(state.installedMods.map((mod) => [Number(mod.id), mod]));
+  const requestedRootIds = [];
+  if (operation === 'load_only' || operation === 'load_with_dependencies') {
+    const modId = numeric(args.modId, undefined, 1);
+    requestedRootIds.push(modId);
+  } else if (operation === 'load_set') {
+    requestedRootIds.push(...uniqueIntegerIds(args.modIds || []));
+    if (requestedRootIds.length === 0) throw new Error('game_session_mod_profile load_set requires modIds.');
+  }
+  requestedRootIds.push(...uniqueIntegerIds(args.additionalModIds || []));
+
+  const includeDependencies = operation === 'load_with_dependencies' || (operation === 'load_set' && args.includeDependencies !== false);
+  const unresolvedDependencies = [];
+  const missingRequested = requestedRootIds.filter((id) => !installedById.has(id));
+  if (missingRequested.length > 0) {
+    throw new Error(`Requested mod id(s) are not installed in this browser session: ${missingRequested.join(', ')}`);
+  }
+
+  const included = [];
+  const seen = new Set();
+  const visiting = new Set();
+  const visit = (id, chain = []) => {
+    if (seen.has(id)) return;
+    const modInfo = installedById.get(id);
+    if (!modInfo) {
+      unresolvedDependencies.push({ id, requiredBy: chain.at(-1) || null, chain });
+      return;
+    }
+    if (visiting.has(id)) return;
+    visiting.add(id);
+    if (includeDependencies) {
+      for (const dependencyId of modInfo.dependencyIds || []) visit(Number(dependencyId), [...chain, id]);
+    }
+    visiting.delete(id);
+    seen.add(id);
+    included.push(id);
+  };
+
+  for (const id of requestedRootIds) visit(id, []);
+
+  const allowUnresolvedDependencies = Boolean(args.allowUnresolvedDependencies);
+  const activeProfile = state.activeProfile || state.profiles[0] || null;
+  const targetProfile =
+    state.profiles.find((profile) => activeProfile && String(profile.id) === String(activeProfile.id)) ||
+    state.profiles.find((profile) => state.activeProfileId !== null && String(profile.id) === String(state.activeProfileId)) ||
+    state.profiles[0] ||
+    {
+      id: 'mcp-temporary-profile',
+      name: 'MCP Temporary Profile',
+      mods: [],
+      autoEnable: false,
+    };
+
+  const nextProfiles = state.profiles.some((profile) => String(profile.id) === String(targetProfile.id))
+    ? state.profiles.map((profile) =>
+        String(profile.id) === String(targetProfile.id)
+          ? {
+              ...profile,
+              mods: included,
+            }
+          : profile
+      )
+    : [
+        ...state.profiles,
+        {
+          ...targetProfile,
+          mods: included,
+        },
+      ];
+
+  const nextValues = { ...state.rawValues };
+  nextValues.modProfiles = JSON.stringify(nextProfiles);
+  nextValues.modLoadOrder = JSON.stringify(included);
+  nextValues.modActiveProfile = String(targetProfile.id);
+
+  const selectedMods = included.map((id) => compactModInfo(installedById.get(id))).filter(Boolean);
+  return {
+    operation,
+    includeDependencies,
+    requestedRootIds,
+    selectedIds: included,
+    selectedMods,
+    targetProfile: {
+      id: targetProfile.id,
+      name: targetProfile.name || null,
+      previousMods: targetProfile.mods || [],
+      nextMods: included,
+    },
+    unresolvedDependencies,
+    canApply: unresolvedDependencies.length === 0 || allowUnresolvedDependencies,
+    nextValues,
+  };
+}
+
+async function ensureModProfileOverrideScript(session) {
+  if (session.modProfileOverrideScriptInstalled) return;
+  await session.context.addInitScript(
+    ({ overrideKey, profileKeys }) => {
+      if (globalThis.__mcpTemporaryModProfileHookInstalled) return;
+      globalThis.__mcpTemporaryModProfileHookInstalled = true;
+      const keySet = new Set(profileKeys);
+
+      function readOverride() {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(overrideKey) || 'null');
+          if (!parsed || typeof parsed !== 'object' || !parsed.values || typeof parsed.values !== 'object') return null;
+          return parsed;
+        } catch {
+          return null;
+        }
+      }
+
+      function requestedKeySet(request) {
+        const keys = request?.Keys || request?.keys || null;
+        if (!Array.isArray(keys)) return null;
+        return new Set(keys.map(String));
+      }
+
+      function mergeUserDataResponse(response, request) {
+        const override = readOverride();
+        if (!override) return response;
+        const requested = requestedKeySet(request);
+        const next = {
+          ...(response || {}),
+          data: {
+            ...((response && response.data) || {}),
+            Data: {
+              ...((response && response.data && response.data.Data) || {}),
+            },
+          },
+        };
+        for (const [key, value] of Object.entries(override.values)) {
+          if (!keySet.has(key)) continue;
+          if (requested && !requested.has(key)) continue;
+          if (value === null || value === undefined) delete next.data.Data[key];
+          else next.data.Data[key] = { ...(next.data.Data[key] || {}), Value: String(value) };
+        }
+        return next;
+      }
+
+      function recordBlockedUpdate(keys) {
+        const at = new Date().toISOString();
+        globalThis.__mcpTemporaryModProfileBlockedUpdates = globalThis.__mcpTemporaryModProfileBlockedUpdates || [];
+        globalThis.__mcpTemporaryModProfileBlockedUpdates.push({ keys, at });
+        if (globalThis.__mcpTemporaryModProfileBlockedUpdates.length > 50) {
+          globalThis.__mcpTemporaryModProfileBlockedUpdates.shift();
+        }
+      }
+
+      function sanitizeUpdateRequest(request) {
+        const override = readOverride();
+        if (!override || !request || typeof request !== 'object') return { request, blockedKeys: [], skip: false };
+        const next = { ...request };
+        const blockedKeys = [];
+        if (request.Data && typeof request.Data === 'object') {
+          next.Data = { ...request.Data };
+          for (const key of Object.keys(next.Data)) {
+            if (!keySet.has(key)) continue;
+            blockedKeys.push(key);
+            delete next.Data[key];
+          }
+        }
+        if (Array.isArray(request.KeysToRemove)) {
+          next.KeysToRemove = request.KeysToRemove.filter((key) => {
+            if (!keySet.has(String(key))) return true;
+            blockedKeys.push(String(key));
+            return false;
+          });
+        }
+        const hasData = next.Data && Object.keys(next.Data).length > 0;
+        const hasKeysToRemove = Array.isArray(next.KeysToRemove) && next.KeysToRemove.length > 0;
+        return { request: next, blockedKeys: [...new Set(blockedKeys)], skip: blockedKeys.length > 0 && !hasData && !hasKeysToRemove };
+      }
+
+      function wrapClientApi(api) {
+        if (!api) return;
+        if (typeof api.GetUserData === 'function' && !api.GetUserData.__mcpTemporaryModProfileWrapped) {
+          const originalGetUserData = api.GetUserData;
+          api.GetUserData = function mcpTemporaryModProfileGetUserData(request, callback, ...rest) {
+            const wrappedCallback =
+              typeof callback === 'function'
+                ? (response, error) => callback(mergeUserDataResponse(response, request), error)
+                : callback;
+            const result = originalGetUserData.call(this, request, wrappedCallback, ...rest);
+            if (result && typeof result.then === 'function') {
+              return result.then((response) => mergeUserDataResponse(response, request));
+            }
+            return result;
+          };
+          api.GetUserData.__mcpTemporaryModProfileWrapped = true;
+        }
+        if (typeof api.UpdateUserData === 'function' && !api.UpdateUserData.__mcpTemporaryModProfileWrapped) {
+          const originalUpdateUserData = api.UpdateUserData;
+          api.UpdateUserData = function mcpTemporaryModProfileUpdateUserData(request, callback, ...rest) {
+            const sanitized = sanitizeUpdateRequest(request);
+            if (sanitized.blockedKeys.length > 0) recordBlockedUpdate(sanitized.blockedKeys);
+            if (sanitized.skip) {
+              callback?.({ code: 200, data: { DataVersion: -1 } }, null);
+              return undefined;
+            }
+            return originalUpdateUserData.call(this, sanitized.request, callback, ...rest);
+          };
+          api.UpdateUserData.__mcpTemporaryModProfileWrapped = true;
+        }
+      }
+
+      function install() {
+        wrapClientApi(globalThis.PlayFab?.ClientApi);
+      }
+
+      try {
+        let currentPlayFab = globalThis.PlayFab;
+        const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'PlayFab');
+        if (!descriptor || descriptor.configurable) {
+          Object.defineProperty(globalThis, 'PlayFab', {
+            configurable: true,
+            enumerable: true,
+            get() {
+              return currentPlayFab;
+            },
+            set(value) {
+              currentPlayFab = value;
+              install();
+            },
+          });
+        }
+      } catch {}
+
+      install();
+      const interval = window.setInterval(install, 5);
+      window.setTimeout(() => window.clearInterval(interval), 60000);
+    },
+    { overrideKey: MOD_PROFILE_OVERRIDE_STORAGE_KEY, profileKeys: MOD_PROFILE_STORAGE_KEYS }
+  );
+  session.modProfileOverrideScriptInstalled = true;
+}
+
+async function writeTemporaryModProfileValues(session, values) {
+  await ensureModProfileOverrideScript(session);
+  return await session.page.evaluate(
+    ({ overrideKey, values }) => {
+      const payload = {
+        values,
+        appliedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(overrideKey, JSON.stringify(payload));
+      for (const [key, value] of Object.entries(values)) {
+        if (value === null || value === undefined) localStorage.removeItem(key);
+        else localStorage.setItem(key, String(value));
+      }
+      return {
+        overrideActive: true,
+        rawValues: Object.fromEntries(Object.keys(values).map((key) => [key, localStorage.getItem(key)])),
+      };
+    },
+    { overrideKey: MOD_PROFILE_OVERRIDE_STORAGE_KEY, values }
+  );
+}
+
+async function restoreModProfileSnapshotValues(session, snapshot) {
+  return await session.page.evaluate(
+    ({ overrideKey, values }) => {
+      localStorage.removeItem(overrideKey);
+      for (const [key, value] of Object.entries(values)) {
+        if (value === null || value === undefined) localStorage.removeItem(key);
+        else localStorage.setItem(key, String(value));
+      }
+      return {
+        overrideActive: false,
+        rawValues: Object.fromEntries(Object.keys(values).map((key) => [key, localStorage.getItem(key)])),
+      };
+    },
+    { overrideKey: MOD_PROFILE_OVERRIDE_STORAGE_KEY, values: snapshot.rawValues }
+  );
+}
+
+async function clearTemporaryModProfileOverride(session) {
+  return await session.page.evaluate((overrideKey) => {
+    localStorage.removeItem(overrideKey);
+    return { overrideActive: false };
+  }, MOD_PROFILE_OVERRIDE_STORAGE_KEY);
+}
+
+async function reloadGameSessionForModProfile(session, args = {}) {
+  const options = {
+    ...session.options,
+    timeoutMs: numeric(args.timeoutMs, session.options.timeoutMs || 90000, 1000),
+    waitMs: numeric(args.waitMs, session.options.waitMs || 10000, 0),
+  };
+  await gotoAndSettle(session.page, options.url, options.timeoutMs);
+  await waitForModManager(session.page, options, { navigate: false });
+  const shouldLoadSave = args.loadSave === undefined ? Boolean(session.options.loadSave) : args.loadSave !== false;
+  let load = null;
+  if (shouldLoadSave) {
+    load = await loadGameSaveInSession(session.page, options);
+    session.load = load;
+  }
+  return {
+    load,
+    modioRecoveryActions: options.modioRecoveryActions || [],
+    state: await collectGameSessionState(session, { maxBrowserEvents: 50 }),
+    modProfileState: await readLiveModProfileState(session),
+  };
+}
+
+async function manageLiveCreatorToolkitLocalMods(session, args = {}, localInput = null) {
+  const operation = args.operation || 'status';
+  const localModId = args.localModId === undefined ? null : numeric(args.localModId, undefined, 1);
+  return await session.page.evaluate(
+    async ({ apply, localInput, localModId, name, namespace, operation }) => {
+      function getAllFromIndexedDB(dbName, storeName) {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open(dbName);
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            const db = request.result;
+            const tx = db.transaction(storeName, 'readonly');
+            const store = tx.objectStore(storeName);
+            const getAll = store.getAll();
+            getAll.onerror = () => reject(getAll.error);
+            getAll.onsuccess = () => {
+              db.close();
+              resolve(getAll.result || []);
+            };
+          };
+        });
+      }
+
+      function putInIndexedDB(dbName, storeName, value) {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open(dbName);
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            const db = request.result;
+            const tx = db.transaction(storeName, 'readwrite');
+            const store = tx.objectStore(storeName);
+            const put = store.put(value);
+            put.onerror = () => reject(put.error);
+            put.onsuccess = () => {
+              db.close();
+              resolve(put.result);
+            };
+          };
+        });
+      }
+
+      function deleteFromIndexedDB(dbName, storeName, key) {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open(dbName);
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            const db = request.result;
+            const tx = db.transaction(storeName, 'readwrite');
+            const store = tx.objectStore(storeName);
+            const del = store.delete(key);
+            del.onerror = () => reject(del.error);
+            del.onsuccess = () => {
+              db.close();
+              resolve(true);
+            };
+          };
+        });
+      }
+
+      function bytesFromBase64(base64) {
+        const binary = atob(base64 || '');
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+        return bytes;
+      }
+
+      function textFromBytes(bytes) {
+        return new TextDecoder().decode(bytes);
+      }
+
+      function resourceType(resourcePath) {
+        const lower = String(resourcePath || '').toLowerCase();
+        if (lower.endsWith('.js') || lower.endsWith('.mjs')) return 'text/javascript';
+        if (lower.endsWith('.json')) return 'application/json';
+        if (lower.endsWith('.css')) return 'text/css';
+        if (lower.endsWith('.html')) return 'text/html';
+        if (lower.endsWith('.png')) return 'image/png';
+        if (lower.endsWith('.svg')) return 'image/svg+xml';
+        return '';
+      }
+
+      function validateManifest(manifest) {
+        if (!manifest || typeof manifest !== 'object') throw new Error('manifest.json must contain a JSON object.');
+        if (manifest.namespace) {
+          if (!/^(?!melvor)[A-Za-z_][A-Za-z0-9_]*$/i.test(manifest.namespace)) {
+            throw new Error('manifest.namespace must contain only alphanumeric characters and underscores and cannot start with "melvor".');
+          }
+          if (manifest.namespace === 'dev') throw new Error('manifest.namespace "dev" is reserved.');
+        }
+        if (!manifest.setup && !manifest.load) throw new Error('manifest.json must define either setup or load.');
+      }
+
+      function normalizeUnpacked(unpacked) {
+        const entries = {};
+        const paths = [];
+        for (const [resourcePath, bytes] of Object.entries(unpacked || {})) {
+          const normalized = String(resourcePath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+          if (!normalized || normalized.endsWith('/')) continue;
+          entries[normalized] = bytes;
+          paths.push(normalized);
+        }
+        return { entries, paths: paths.sort() };
+      }
+
+      function summarizeLocalMod(record) {
+        const resources = Object.keys(record?.mod?.resources || {}).sort();
+        return {
+          id: record?.id ?? null,
+          name: record?.name || record?.mod?.name || null,
+          disabled: Boolean(record?.disabled),
+          directoryPath: record?.dir || null,
+          loadPriority: record?.loadPriority ?? null,
+          released: Boolean(record?.released),
+          package: record?.package ? { name: record.package.name || null, size: record.package.size || 0, type: record.package.type || '' } : null,
+          mod: {
+            id: record?.mod?.id ?? null,
+            name: record?.mod?.name || null,
+            namespace: record?.mod?.namespace || null,
+            version: record?.mod?.version || '',
+            author: record?.mod?.author || '',
+            setup: record?.mod?.setup || null,
+            load: record?.mod?.load || null,
+            icon: record?.mod?.icon || null,
+            resourceCount: resources.length,
+            resources,
+          },
+        };
+      }
+
+      async function buildLocalModRecord(input, existingLocalMods) {
+        if (!globalThis.fflate?.zipSync || !globalThis.fflate?.unzipSync) {
+          throw new Error('fflate zip helpers were not available in the game page.');
+        }
+
+        let manifest;
+        let files;
+        let packageBytes;
+        if (input.kind === 'directory') {
+          files = input.files.map((file) => ({
+            path: file.path,
+            type: file.type || resourceType(file.path),
+            bytes: bytesFromBase64(file.base64),
+          }));
+          manifest = input.manifest;
+          const zipInput = {};
+          for (const file of files) zipInput[file.path] = file.bytes;
+          packageBytes = globalThis.fflate.zipSync(zipInput);
+        } else {
+          packageBytes = bytesFromBase64(input.packageBase64);
+          const unpacked = normalizeUnpacked(globalThis.fflate.unzipSync(packageBytes));
+          if (!unpacked.entries['manifest.json']) throw new Error('Zip package has no manifest.json at the root.');
+          manifest = JSON.parse(textFromBytes(unpacked.entries['manifest.json']));
+          files = unpacked.paths.map((resourcePath) => ({
+            path: resourcePath,
+            type: resourceType(resourcePath),
+            bytes: unpacked.entries[resourcePath],
+          }));
+        }
+
+        validateManifest(manifest);
+        const resources = {};
+        for (const file of files) {
+          if (!file.bytes?.length) continue;
+          resources[file.path] = new Blob([file.bytes], { type: file.type || resourceType(file.path) });
+        }
+        const displayName = input.requestedName || manifest.name || input.packageName.replace(/\.zip$/i, '');
+        const nextPriority = existingLocalMods.reduce((max, record) => Math.max(max, Number(record.loadPriority) || 0), 0) + 1;
+        const linkedModId = Number.isInteger(input.linkedModId) ? input.linkedModId : -1;
+        const modRecord = {
+          id: linkedModId > 0 ? linkedModId : -1,
+          name: displayName,
+          namespace: manifest.namespace,
+          version: manifest.version || '',
+          tags: {
+            supportedGameVersion: typeof gameVersion === 'string' ? gameVersion.substring(1) : '',
+            platforms: [],
+            types: [],
+          },
+          author: manifest.author || 'MCP',
+          description: manifest.description || '',
+          icon: manifest.icon,
+          setup: manifest.setup,
+          load: manifest.load,
+          resources,
+          modioUrl: '',
+          homepageUrl: '',
+          dependencies: manifest.dependencies || [],
+          installed: Math.floor(Date.now() / 1000),
+          updated: 0,
+          changelog: '',
+        };
+        const existing =
+          (Number.isInteger(input.localModId) && existingLocalMods.find((record) => Number(record.id) === input.localModId)) ||
+          (input.replace &&
+            existingLocalMods.find(
+              (record) =>
+                (manifest.namespace && record.mod?.namespace === manifest.namespace) ||
+                (linkedModId > 0 && Number(record.mod?.id) === linkedModId) ||
+                record.name === displayName
+            )) ||
+          null;
+
+        const record = {
+          name: displayName,
+          mod: modRecord,
+          dir: input.directoryPath || '',
+          package: new File([packageBytes], input.packageName, { type: 'application/zip' }),
+          released: existing ? Boolean(existing.released) : false,
+          loadPriority: existing?.loadPriority ?? nextPriority,
+          disabled: Boolean(input.disabled),
+        };
+        if (existing) record.id = existing.id;
+        return record;
+      }
+
+      const localMods = await getAllFromIndexedDB('melvordb', 'localMods');
+      const installedMods = await getAllFromIndexedDB('melvordb', 'mods');
+      const loadedNames = typeof mod !== 'undefined' ? mod.manager?.getLoadedModList?.() || [] : [];
+      const creatorToolkitInstalled = installedMods.some(
+        (entry) => Number(entry.id) === 2419237 || entry.namespace === 'creatorToolkit' || entry.name === 'Creator Toolkit'
+      );
+      const creatorToolkitLoaded = loadedNames.includes('Creator Toolkit');
+      const loadingModGuard = localStorage.getItem('mct_i--loading-mod');
+      const warnings = [];
+      if (!creatorToolkitInstalled) warnings.push('Creator Toolkit is not installed in Mod Manager.');
+      if (!creatorToolkitLoaded) warnings.push('Creator Toolkit is not loaded in the active profile; local mods will not load until it is enabled and the game reloads.');
+      if (loadingModGuard) warnings.push(`Creator Toolkit has a stale localStorage loading guard for local mod id ${loadingModGuard}.`);
+
+      if (operation === 'status') {
+        return {
+          apply,
+          changed: false,
+          creatorToolkitInstalled,
+          creatorToolkitLoaded,
+          loadingModGuard,
+          loadedNames,
+          localMods: localMods.map(summarizeLocalMod),
+          operation,
+          warnings,
+        };
+      }
+
+      if (operation === 'remove') {
+        const existing =
+          (Number.isInteger(localModId) && localMods.find((record) => Number(record.id) === localModId)) ||
+          (namespace && localMods.find((record) => record.mod?.namespace === namespace)) ||
+          (name && localMods.find((record) => record.name === name || record.mod?.name === name)) ||
+          null;
+        if (!existing) throw new Error('Creator Toolkit local mod was not found for remove.');
+        if (apply) await deleteFromIndexedDB('melvordb', 'localMods', existing.id);
+        return {
+          apply,
+          changed: true,
+          creatorToolkitInstalled,
+          creatorToolkitLoaded,
+          loadingModGuard,
+          localMod: summarizeLocalMod(existing),
+          operation,
+          reloadRequired: true,
+          warnings: apply ? warnings : [...warnings, 'Dry run only. Pass apply=true to remove this local mod.'],
+        };
+      }
+
+      if (operation !== 'install') throw new Error(`Unsupported live Creator Toolkit operation: ${operation}`);
+      const record = await buildLocalModRecord(localInput, localMods);
+      const key = apply ? await putInIndexedDB('melvordb', 'localMods', record) : record.id ?? null;
+      if (key !== null && key !== undefined) record.id = key;
+      return {
+        apply,
+        changed: true,
+        creatorToolkitInstalled,
+        creatorToolkitLoaded,
+        loadingModGuard,
+        localMod: summarizeLocalMod(record),
+        operation,
+        reloadRequired: true,
+        warnings: apply ? warnings : [...warnings, 'Dry run only. Pass apply=true to install this local mod.'],
+      };
+    },
+    {
+      apply: Boolean(args.apply),
+      localInput,
+      localModId,
+      name: args.name || '',
+      namespace: args.namespace || '',
+      operation,
+    }
+  );
+}
+
+async function readLiveLocalModVerification(session, target = {}) {
+  return await session.page.evaluate(({ localModId, localModName, namespace }) => {
+    function contextExists(value) {
+      if (!value || typeof mod === 'undefined' || !mod.getContext) return false;
+      try {
+        mod.getContext(value);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    const loadedNames = typeof mod !== 'undefined' ? mod.manager?.getLoadedModList?.() || [] : [];
+    const marker = globalThis.__mcpLocalModShenanigans?.[namespace] || globalThis.__mcpLocalModLoaded || null;
+    const loadedByName = localModName ? loadedNames.includes(localModName) : false;
+    const loadedByNamespace = contextExists(namespace);
+    const loadedByMarker = marker && (!namespace || marker.namespace === namespace);
+    return {
+      loaded: Boolean(loadedByName || loadedByNamespace || loadedByMarker),
+      loadedByName,
+      loadedByNamespace,
+      loadedByMarker: Boolean(loadedByMarker),
+      marker,
+      localModId: localModId ?? null,
+      localModName: localModName || null,
+      namespace: namespace || null,
+      loadedNames,
+      localStorageLoadingGuard: localStorage.getItem('mct_i--loading-mod'),
+      title: document.title,
+      location: location.href,
+    };
+  }, target);
+}
+
+async function waitForLiveLocalModVerification(session, target, args = {}) {
+  const timeoutMs = numeric(args.timeoutMs, session.options.timeoutMs || 90000, 1000);
+  const deadline = Date.now() + Math.min(timeoutMs, 60000);
+  let last = null;
+  while (Date.now() < deadline) {
+    last = await readLiveLocalModVerification(session, target).catch((error) => ({
+      loaded: false,
+      error: error instanceof Error ? error.message : String(error),
+    }));
+    if (last.loaded) return last;
+    await session.page.waitForTimeout(1000).catch(() => {});
+  }
+  return last || { loaded: false, error: 'Timed out waiting for local mod verification.' };
+}
+
 async function getGameSession(id = 'default') {
   const session = gameSessions.get(id);
   if (!session || session.page.isClosed()) {
@@ -2738,6 +4209,9 @@ async function toolGameSessionStart(args = {}) {
     login: null,
     load: null,
     profile: null,
+    modProfileSnapshots: new Map(),
+    modProfileOverrideScriptInstalled: false,
+    localModInstalls: new Map(),
   };
 
   page.on('console', (message) => {
@@ -2879,6 +4353,273 @@ async function toolGameSessionState(args = {}) {
   const session = await getGameSession(browserSessionId(args));
   const state = await collectGameSessionState(session, args);
   return textContent(JSON.stringify({ ok: true, state }, null, 2));
+}
+
+async function toolGameSessionSave(args = {}) {
+  const session = await getGameSession(browserSessionId(args));
+  const operation = args.operation || 'status';
+  const saveDir = args.saveDir || DEFAULT_SAVE_FIXTURES_DIR;
+  const saveSource = args.saveSource || 'local';
+  const configuredSlot = configuredSaveSlot(args);
+  const saveSlot = args.saveSlot === undefined ? configuredSlot : numeric(args.saveSlot, undefined, 0);
+  const targetSlot = args.targetSlot === undefined ? configuredSlot : numeric(args.targetSlot, undefined, 0);
+
+  if (operation === 'status') {
+    const [slots, fixtures] = await Promise.all([readSaveSlots(session), listSaveFixtures(saveDir)]);
+    return textContent(JSON.stringify({ ok: true, sessionId: session.id, operation, slots, fixtures }, null, 2));
+  }
+
+  if (operation === 'list_slots') {
+    const slots = await readSaveSlots(session);
+    return textContent(JSON.stringify({ ok: true, sessionId: session.id, operation, slots }, null, 2));
+  }
+
+  if (operation === 'list_fixtures') {
+    const fixtures = await listSaveFixtures(saveDir);
+    return textContent(JSON.stringify({ ok: true, sessionId: session.id, operation, fixtures }, null, 2));
+  }
+
+  if (operation === 'export_slot') {
+    if (!Number.isInteger(saveSlot)) throw new Error('export_slot requires saveSlot or MELVOR_TEST_CHARACTER_SLOT.');
+    const fixtureName = safeSaveFixtureName(args.fixture);
+    const { saveString, header } = await readSaveStringFromSlot(session, saveSource, saveSlot);
+    const fixture = fixtureForSaveString({
+      fixtureName,
+      saveString,
+      header,
+      notes: args.notes || '',
+      source: { type: 'slot', saveSource, saveSlot, sessionId: session.id },
+    });
+    const plan = {
+      fixture: redactSaveFixture(fixture),
+      saveDir: resolveSaveFixturesDir(saveDir),
+      targetPath: saveFixturePath(saveDir, fixtureName).filePath,
+    };
+    if (!args.apply) return textContent(JSON.stringify({ ok: true, sessionId: session.id, dryRun: true, operation, plan }, null, 2));
+    const written = await writeSaveFixture(saveDir, fixtureName, fixture);
+    return textContent(JSON.stringify({ ok: true, sessionId: session.id, operation, written }, null, 2));
+  }
+
+  if (operation === 'export_current') {
+    const fixtureName = safeSaveFixtureName(args.fixture);
+    const { saveString, header, currentCharacter } = await readCurrentSaveString(session);
+    const fixture = fixtureForSaveString({
+      fixtureName,
+      saveString,
+      header,
+      notes: args.notes || '',
+      source: { type: 'current', sessionId: session.id, currentCharacter },
+    });
+    const plan = {
+      fixture: redactSaveFixture(fixture),
+      saveDir: resolveSaveFixturesDir(saveDir),
+      targetPath: saveFixturePath(saveDir, fixtureName).filePath,
+    };
+    if (!args.apply) return textContent(JSON.stringify({ ok: true, sessionId: session.id, dryRun: true, operation, plan }, null, 2));
+    const written = await writeSaveFixture(saveDir, fixtureName, fixture);
+    return textContent(JSON.stringify({ ok: true, sessionId: session.id, operation, written }, null, 2));
+  }
+
+  if (operation === 'write_fixture') {
+    const fixtureName = safeSaveFixtureName(args.fixture);
+    const rawSaveString = String(args.saveString || '');
+    if (!rawSaveString) throw new Error('write_fixture requires saveString.');
+    const header = await validateSaveStringInSession(session, rawSaveString);
+    const fixture = fixtureForSaveString({
+      fixtureName,
+      saveString: rawSaveString,
+      header,
+      notes: args.notes || '',
+      source: { type: 'provided', sessionId: session.id },
+    });
+    const plan = {
+      fixture: redactSaveFixture(fixture),
+      saveDir: resolveSaveFixturesDir(saveDir),
+      targetPath: saveFixturePath(saveDir, fixtureName).filePath,
+    };
+    if (!args.apply) return textContent(JSON.stringify({ ok: true, sessionId: session.id, dryRun: true, operation, plan }, null, 2));
+    const written = await writeSaveFixture(saveDir, fixtureName, fixture);
+    return textContent(JSON.stringify({ ok: true, sessionId: session.id, operation, written }, null, 2));
+  }
+
+  if (operation === 'import_fixture' || operation === 'load_fixture') {
+    if (!Number.isInteger(targetSlot)) throw new Error(`${operation} requires targetSlot or MELVOR_TEST_CHARACTER_SLOT.`);
+    const { filePath, fixture } = await readSaveFixture(saveDir, args.fixture);
+    const header = await validateSaveStringInSession(session, fixture.saveString);
+    const plan = {
+      fixturePath: filePath,
+      fixture: redactSaveFixture({ ...fixture, header }),
+      targetSlot,
+      overwriteLocalSlot: Boolean(args.overwriteLocalSlot),
+      loadAfterImport: operation === 'load_fixture' || args.loadAfterImport === true,
+    };
+    if (!args.apply) return textContent(JSON.stringify({ ok: true, sessionId: session.id, dryRun: true, operation, plan }, null, 2));
+    const imported = await writeSaveStringToLocalSlot(session, fixture.saveString, targetSlot, args.overwriteLocalSlot);
+    let loaded = null;
+    if (operation === 'load_fixture' || args.loadAfterImport === true) {
+      loaded = await reloadAndLoadSaveSlot(session, { ...args, saveSource: 'local', saveSlot: targetSlot });
+    }
+    return textContent(JSON.stringify({ ok: true, sessionId: session.id, operation, imported, loaded }, null, 2));
+  }
+
+  if (operation === 'load_slot') {
+    if (!Number.isInteger(saveSlot)) throw new Error('load_slot requires saveSlot or MELVOR_TEST_CHARACTER_SLOT.');
+    const plan = { saveSource, saveSlot, reload: args.reload !== false };
+    if (!args.apply) return textContent(JSON.stringify({ ok: true, sessionId: session.id, dryRun: true, operation, plan }, null, 2));
+    const loaded = await reloadAndLoadSaveSlot(session, { ...args, saveSource, saveSlot });
+    return textContent(JSON.stringify({ ok: true, sessionId: session.id, operation, loaded }, null, 2));
+  }
+
+  throw new Error(`Unsupported game_session_save operation: ${operation}`);
+}
+
+async function toolGameSessionLocalMod(args = {}) {
+  const session = await getGameSession(browserSessionId(args));
+  const operation = args.operation || 'status';
+  if (session.profile?.active && !args.allowDuringProfile && ['install_generated', 'install_path', 'remove', 'cleanup'].includes(operation)) {
+    throw new Error('Refusing to change Creator Toolkit local mods while live profiling is active. Stop profiling first or pass allowDuringProfile=true.');
+  }
+
+  if (!session.localModInstalls) session.localModInstalls = new Map();
+
+  if (operation === 'status') {
+    const status = await manageLiveCreatorToolkitLocalMods(session, { ...args, operation: 'status' }, null);
+    return textContent(JSON.stringify({ ok: true, sessionId: session.id, operation, sessionLocalMods: [...session.localModInstalls.values()], status }, null, 2));
+  }
+
+  if (operation === 'cleanup') {
+    const targets = [...session.localModInstalls.values()];
+    if (!args.apply) {
+      return textContent(JSON.stringify({ ok: true, sessionId: session.id, dryRun: true, operation, targets }, null, 2));
+    }
+    const removed = [];
+    for (const target of targets) {
+      const result = await manageLiveCreatorToolkitLocalMods(
+        session,
+        { ...args, operation: 'remove', localModId: target.id, apply: true },
+        null
+      ).catch((error) => ({ ok: false, target, error: error instanceof Error ? error.message : String(error) }));
+      removed.push(result);
+      if (result.localMod?.id !== undefined) session.localModInstalls.delete(Number(result.localMod.id));
+    }
+    const reload = args.reload === false ? null : await reloadGameSessionForModProfile(session, args);
+    return textContent(JSON.stringify({ ok: true, sessionId: session.id, operation, removed, reload }, null, 2));
+  }
+
+  if (operation === 'remove') {
+    const result = await manageLiveCreatorToolkitLocalMods(session, { ...args, operation: 'remove' }, null);
+    if (!args.apply) return textContent(JSON.stringify({ ok: true, sessionId: session.id, dryRun: true, operation, result }, null, 2));
+    if (result.localMod?.id !== undefined) session.localModInstalls.delete(Number(result.localMod.id));
+    const reload = args.reload === false ? null : await reloadGameSessionForModProfile(session, args);
+    return textContent(JSON.stringify({ ok: true, sessionId: session.id, operation, result, reload }, null, 2));
+  }
+
+  if (!['install_generated', 'install_path'].includes(operation)) {
+    throw new Error(`Unsupported game_session_local_mod operation: ${operation}`);
+  }
+
+  const localInput = operation === 'install_generated' ? await buildGeneratedLocalModInput(args) : await buildPathLocalModInput(args);
+  const result = await manageLiveCreatorToolkitLocalMods(session, { ...args, operation: 'install' }, localInput);
+  if (!args.apply) {
+    return textContent(JSON.stringify({ ok: true, sessionId: session.id, dryRun: true, operation, localInput: {
+      kind: localInput.kind,
+      manifest: localInput.manifest || null,
+      packageName: localInput.packageName,
+      fileCount: localInput.files?.length ?? null,
+      size: localInput.size ?? null,
+      sourcePath: localInput.sourcePath || null,
+    }, result }, null, 2));
+  }
+
+  const installed = result.localMod || null;
+  if (installed?.id !== undefined && installed.id !== null) {
+    session.localModInstalls.set(Number(installed.id), {
+      id: Number(installed.id),
+      name: installed.name || installed.mod?.name || null,
+      namespace: installed.mod?.namespace || null,
+      installedAt: new Date().toISOString(),
+      operation,
+    });
+  }
+
+  const reload = args.reload === false ? null : await reloadGameSessionForModProfile(session, args);
+  const verification =
+    args.verify === false
+      ? null
+      : await waitForLiveLocalModVerification(
+          session,
+          {
+            localModId: installed?.id ?? null,
+            localModName: installed?.name || installed?.mod?.name || localInput.requestedName || null,
+            namespace: installed?.mod?.namespace || localInput.manifest?.namespace || null,
+          },
+          args
+        );
+
+  return textContent(JSON.stringify({ ok: true, sessionId: session.id, operation, result, reload, verification }, null, 2));
+}
+
+async function toolGameSessionModProfile(args = {}) {
+  const session = await getGameSession(browserSessionId(args));
+  const operation = args.operation || 'status';
+  const snapshotKey = normalizeSnapshotKey(args.snapshotKey);
+  if (session.profile?.active && !args.allowDuringProfile && ['load_only', 'load_with_dependencies', 'load_set', 'restore'].includes(operation)) {
+    throw new Error('Refusing to change Mod Manager profile while live profiling is active. Stop profiling first or pass allowDuringProfile=true.');
+  }
+
+  const before = await readLiveModProfileState(session);
+
+  if (operation === 'status') {
+    return textContent(JSON.stringify({ ok: true, sessionId: session.id, operation, state: before }, null, 2));
+  }
+
+  if (operation === 'snapshot') {
+    const snapshot = storeModProfileSnapshot(session, snapshotKey, before);
+    return textContent(JSON.stringify({ ok: true, sessionId: session.id, operation, snapshotKey, snapshot }, null, 2));
+  }
+
+  if (operation === 'restore') {
+    const snapshot = session.modProfileSnapshots?.get(snapshotKey);
+    if (!snapshot) throw new Error(`No Mod Manager profile snapshot named "${snapshotKey}" exists for session "${session.id}".`);
+    const plan = {
+      operation,
+      snapshotKey,
+      restoreValues: snapshot.rawValues,
+      reload: args.reload !== false,
+      loadSave: args.loadSave === undefined ? Boolean(session.options.loadSave) : args.loadSave !== false,
+    };
+    if (!args.apply) {
+      return textContent(JSON.stringify({ ok: true, sessionId: session.id, dryRun: true, plan, before }, null, 2));
+    }
+    const write =
+      args.reload === false ? await restoreModProfileSnapshotValues(session, snapshot) : await writeTemporaryModProfileValues(session, snapshot.rawValues);
+    const reload = args.reload === false ? null : await reloadGameSessionForModProfile(session, args);
+    const clearedOverride = args.reload === false ? null : await clearTemporaryModProfileOverride(session);
+    const after = await readLiveModProfileState(session);
+    return textContent(JSON.stringify({ ok: true, sessionId: session.id, operation, snapshotKey, write, reload, clearedOverride, before, after }, null, 2));
+  }
+
+  if (!['load_only', 'load_with_dependencies', 'load_set'].includes(operation)) {
+    throw new Error(`Unsupported game_session_mod_profile operation: ${operation}`);
+  }
+
+  const snapshot = storeModProfileSnapshot(session, snapshotKey, before);
+  const plan = computeModProfilePlan(before, { ...args, operation });
+  if (!plan.canApply) {
+    const message = `Cannot apply temporary Mod Manager profile; unresolved dependencies: ${plan.unresolvedDependencies
+      .map((dependency) => dependency.id)
+      .join(', ')}`;
+    if (args.apply) throw new Error(message);
+  }
+
+  if (!args.apply) {
+    return textContent(JSON.stringify({ ok: true, sessionId: session.id, dryRun: true, snapshotKey, snapshot, plan, before }, null, 2));
+  }
+
+  const write = await writeTemporaryModProfileValues(session, plan.nextValues);
+  const reload = args.reload === false ? null : await reloadGameSessionForModProfile(session, args);
+  const after = reload?.modProfileState || (await readLiveModProfileState(session));
+  return textContent(JSON.stringify({ ok: true, sessionId: session.id, operation, snapshotKey, snapshot, plan, write, reload, before, after }, null, 2));
 }
 
 async function toolGameSessionDebugProbe(args = {}) {
@@ -3826,6 +5567,9 @@ async function callTool(name, args) {
     if (name === 'game_session_start') return await toolGameSessionStart(args);
     if (name === 'game_session_action') return await toolGameSessionAction(args);
     if (name === 'game_session_state') return await toolGameSessionState(args);
+    if (name === 'game_session_save') return await toolGameSessionSave(args);
+    if (name === 'game_session_local_mod') return await toolGameSessionLocalMod(args);
+    if (name === 'game_session_mod_profile') return await toolGameSessionModProfile(args);
     if (name === 'game_session_debug_probe') return await toolGameSessionDebugProbe(args);
     if (name === 'game_session_time_skip') return await toolGameSessionTimeSkip(args);
     if (name === 'game_session_screenshot') return await toolGameSessionScreenshot(args);

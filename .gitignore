@@ -10,6 +10,7 @@ mod-sources/
 !tests/fixtures/mod-sources/**
 mods/
 reports/
+save-fixtures/
 playwright-report/
 test-results/
 *.log
