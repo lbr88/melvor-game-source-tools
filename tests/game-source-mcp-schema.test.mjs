@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import { spawn, spawnSync } from 'node:child_process';
 import readline from 'node:readline';
 import test from 'node:test';
 import path from 'node:path';
@@ -525,4 +527,75 @@ test('release upload dry-run validates local policy before mutation', async (t) 
   assert.equal(response.error, undefined);
   assert.equal(response.result.isError, true);
   assert.match(response.result.content[0].text, /missing manifest|missing mod directory/i);
+});
+
+test('release upload dry-run allows owned hidden draft mappings', async (t) => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'melvor-mcp-hidden-draft-'));
+  t.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
+
+  const mod = 'hidden-draft-mod';
+  const modDir = path.join(workspace, 'mods', mod);
+  const configDir = path.join(workspace, 'config');
+  const releaseDir = path.join(workspace, 'releases', mod);
+  fs.mkdirSync(modDir, { recursive: true });
+  fs.mkdirSync(configDir, { recursive: true });
+  fs.mkdirSync(releaseDir, { recursive: true });
+  fs.writeFileSync(path.join(modDir, 'manifest.json'), JSON.stringify({
+    namespace: 'HiddenDraftMod',
+    name: 'Hidden Draft Mod',
+    version: '0.1.0',
+    setup: 'setup.mjs',
+  }, null, 2));
+  fs.writeFileSync(path.join(modDir, 'setup.mjs'), 'export function setup() {}\n');
+  fs.writeFileSync(path.join(configDir, 'modio-matches.json'), JSON.stringify({
+    mods: [
+      {
+        local_folder: mod,
+        automation: {
+          role: 'owned_hidden_draft',
+          upload: true,
+        },
+        modio: {
+          id: 123456,
+          name: 'Hidden Draft Mod',
+          name_id: 'hidden-draft-mod',
+          version: '0.1.0',
+        },
+      },
+    ],
+  }, null, 2));
+  const zipPath = path.join(releaseDir, `${mod}-0.1.0.zip`);
+  fs.writeFileSync(zipPath, 'dry-run placeholder zip\n');
+
+  for (const args of [
+    ['init', '-b', 'main'],
+    ['config', 'user.email', 'test@example.invalid'],
+    ['config', 'user.name', 'MCP Test'],
+    ['add', '.'],
+    ['commit', '-m', 'fixture'],
+  ]) {
+    const result = spawnSync('git', args, { cwd: modDir, encoding: 'utf8' });
+    assert.equal(result.status, 0, `git ${args.join(' ')} failed: ${result.stderr || result.stdout}`);
+  }
+
+  const client = startServer(t);
+  await initialize(client);
+
+  const response = await client.request('tools/call', {
+    name: 'melvor_modio_upload',
+    arguments: {
+      mod,
+      workspaceRoot: workspace,
+      refreshModio: false,
+      zipPath,
+    },
+  });
+
+  assert.equal(response.error, undefined);
+  assert.equal(response.result.isError, false);
+  const plan = JSON.parse(response.result.content[0].text);
+  assert.equal(plan.upload.role, 'owned_hidden_draft');
+  assert.equal(plan.upload.modioId, 123456);
+  assert.equal(plan.apply, false);
+  assert.match(plan.requiredConfirm, /upload hidden-draft-mod 0\.1\.0 to mod\.io 123456/);
 });

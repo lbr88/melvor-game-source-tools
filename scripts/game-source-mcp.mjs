@@ -851,7 +851,12 @@ function resolveReleaseContext(args = {}) {
     args.mappingFile || process.env.MELVOR_MODIO_MAPPING_FILE || path.join(workspaceRoot, 'config', 'modio-matches.json')
   );
   const gameId = String(args.gameId || process.env.MODIO_GAME_ID || DEFAULT_MODIO_GAME_ID);
-  const apiBase = String(args.apiBase || process.env.MODIO_GAME_API_BASE_URL || DEFAULT_MODIO_GAME_API_BASE_URL).replace(/\/+$/, '');
+  const apiBase = String(
+    args.apiBase
+      || process.env.MODIO_API_BASE_URL
+      || process.env.MODIO_GAME_API_BASE_URL
+      || DEFAULT_MODIO_GAME_API_BASE_URL
+  ).replace(/\/+$/, '');
 
   return {
     workspaceRoot,
@@ -961,6 +966,29 @@ async function modioJson(context, endpoint, params = {}) {
   return payload;
 }
 
+async function modioJsonAuthenticated(context, endpoint, params = {}) {
+  if (!context.accessToken) throw new Error('MODIO_ACCESS_TOKEN is required for authenticated mod.io checks. Pass envFile or set it in the MCP environment.');
+  const url = modioApiUrl(context, endpoint, params);
+  const response = await fetch(url, {
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${context.accessToken}`,
+      'user-agent': `melvor-game-source-tools/${SERVER_VERSION}`,
+    },
+  });
+  const payload = await response.json().catch(async () => ({ message: await response.text() }));
+  if (!response.ok) throw new Error(`mod.io authenticated API failed: ${response.status} ${modioErrorMessage(payload)}`);
+  return payload;
+}
+
+function isOwnedUploadRole(role) {
+  return typeof role === 'string' && role.startsWith('owned_');
+}
+
+function roleNeedsAuthenticatedModioRead(role) {
+  return /hidden|private|draft/i.test(String(role || ''));
+}
+
 function isoFromModioTimestamp(value) {
   try {
     if (!value) return null;
@@ -993,21 +1021,34 @@ function sanitizeModioRecord(record) {
     name_id: record.name_id || null,
     profile_url: record.profile_url || null,
     author: record.submitted_by?.username || record.submitted_by?.display_name || record.submitted_by?.id || null,
+    visible: record.visible ?? null,
+    status: record.status ?? null,
+    tags: Array.isArray(record.tags)
+      ? record.tags.map((tag) => (typeof tag === 'string' ? tag : tag?.name)).filter(Boolean)
+      : [],
     date_updated: isoFromModioTimestamp(record.date_updated),
     modfile: record.modfile
       ? {
           id: record.modfile.id || null,
           version: record.modfile.version || null,
           filename: record.modfile.filename || null,
+          metadata_blob: record.modfile.metadata_blob || null,
+          active: record.modfile.active ?? null,
+          virus_status: record.modfile.virus_status ?? null,
+          virus_positive: record.modfile.virus_positive ?? null,
+          date_scanned: isoFromModioTimestamp(record.modfile.date_scanned),
           date_added: isoFromModioTimestamp(record.modfile.date_added),
         }
       : null,
   };
 }
 
-async function fetchModioRecord(context, modId) {
+async function fetchModioRecord(context, modId, options = {}) {
   if (!modId) return null;
-  return sanitizeModioRecord(await modioJson(context, `/games/${context.gameId}/mods/${modId}`));
+  const payload = options.authenticated
+    ? await modioJsonAuthenticated(context, `/games/${context.gameId}/mods/${modId}`)
+    : await modioJson(context, `/games/${context.gameId}/mods/${modId}`);
+  return sanitizeModioRecord(payload);
 }
 
 async function searchModioRecords(context, query) {
@@ -1046,9 +1087,12 @@ async function releaseSummary(context, mapping, mod, args = {}) {
       ? {
           id: configuredModio.id || null,
           name: configuredModio.name || null,
+          name_id: configuredModio.name_id || null,
           profile_url: configuredModio.profile_url || null,
           author: configuredModio.author || null,
           version: configuredModio.version || null,
+          modfile_id: configuredModio.modfile_id || null,
+          modfile_filename: configuredModio.modfile_filename || null,
           date_updated: configuredModio.date_updated || null,
         }
       : null,
@@ -1062,13 +1106,15 @@ async function releaseSummary(context, mapping, mod, args = {}) {
   if (!manifest) summary.issues.push('missing manifest.json');
   if (!fs.existsSync(dir)) summary.issues.push('missing mod directory');
   if (summary.policy.role === 'reference_only') summary.issues.push('reference-only; do not release or upload');
-  if (summary.policy.role === 'owned_public_mod' && !summary.configuredModio?.id) summary.issues.push('owned public mod has no mod.io id');
+  if (isOwnedUploadRole(summary.policy.role) && !summary.configuredModio?.id) summary.issues.push(`${summary.policy.role} mod has no mod.io id`);
   if (summary.git.isRepo && summary.git.dirty) summary.issues.push('git working tree is dirty');
 
   if (args.refreshModio !== false) {
     try {
       if (summary.configuredModio?.id) {
-        summary.currentModio = await fetchModioRecord(context, summary.configuredModio.id);
+        summary.currentModio = await fetchModioRecord(context, summary.configuredModio.id, {
+          authenticated: roleNeedsAuthenticatedModioRead(summary.policy.role),
+        });
       } else if (manifest?.name) {
         summary.searchMatches = await searchModioRecords(context, manifest.name);
       }
@@ -1082,7 +1128,7 @@ async function releaseSummary(context, mapping, mod, args = {}) {
     ? path.join(context.workspaceRoot, 'releases', mod, `${mod}-${summary.manifest.version}.zip`)
     : null;
   summary.uploadEligible = Boolean(
-    summary.policy.role === 'owned_public_mod'
+    isOwnedUploadRole(summary.policy.role)
       && summary.policy.upload
       && summary.configuredModio?.id
       && summary.manifest?.version
@@ -1100,7 +1146,9 @@ function assertCanPackage(summary) {
 
 function assertCanUpload(summary) {
   assertCanPackage(summary);
-  if (summary.policy.role !== 'owned_public_mod') throw new Error(`${summary.mod} is not mapped as an owned public mod.`);
+  if (!isOwnedUploadRole(summary.policy.role)) {
+    throw new Error(`${summary.mod} is not mapped as an owned mod.io upload target (role=${summary.policy.role}).`);
+  }
   if (summary.policy.upload !== true) throw new Error(`${summary.mod} is not enabled for mod.io upload by policy.`);
   if (!summary.configuredModio?.id) throw new Error(`${summary.mod} has no configured mod.io id.`);
   if (!summary.git.isRepo) throw new Error(`${summary.mod} is not a git repository.`);
@@ -5465,6 +5513,7 @@ async function toolModioUpload(args = {}) {
     zip,
     upload: {
       mod: summary.mod,
+      role: summary.policy.role,
       localVersion: summary.manifest.version,
       modioId: summary.configuredModio.id,
       endpoint: `${context.apiBase}/games/${context.gameId}/mods/${summary.configuredModio.id}/files`,

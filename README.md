@@ -126,14 +126,14 @@ Useful tools:
 - `melvor_mod_release_package`: build or plan `releases/<mod>/<mod>-<version>.zip` for a releasable mod.
 - `melvor_modio_upload`: upload a prepared zip to mod.io. This is dry-run by default and requires `apply: true` plus the exact confirmation phrase returned by the dry-run.
 
-Release uploads are blocked for `reference_only` mods and for any mod whose workspace mapping does not set `automation.upload` to `true`. Read credentials from an ignored workspace `.env`; do not put API keys or OAuth tokens in this repository.
+Release uploads are blocked for `reference_only` mods, unmapped mods, and any mod whose workspace mapping does not set `automation.upload` to `true`. Owned upload roles such as `owned_public_mod` and `owned_hidden_draft` are allowed by policy when they include a mod.io id. Read credentials from an ignored workspace `.env`; do not put API keys or OAuth tokens in this repository.
 
 ### mod.io Credentials
 
 The release tools use two different mod.io credentials:
 
 - `MODIO_API_KEY`: read/query credential. mod.io documents API-key requests as read-only.
-- `MODIO_ACCESS_TOKEN`: OAuth bearer token. mod.io requires OAuth access tokens for create, update, delete, and upload operations.
+- `MODIO_ACCESS_TOKEN`: OAuth bearer token. mod.io requires OAuth access tokens for create, update, delete, upload operations, and hidden/private mod refreshes.
 
 The canonical mod.io docs are:
 
@@ -167,7 +167,7 @@ Typical workflow:
 1. Run `melvor_mod_release_status` first. This is read-only and verifies git state, manifest version, release policy, and mod.io mapping.
 2. Build or pass a zip path.
 3. Run `melvor_modio_upload` without `apply` to get the exact confirmation phrase.
-4. Run `melvor_modio_upload` with `apply: true`, `active: false`, and the exact `confirm` phrase.
+4. Run `melvor_modio_upload` with `apply: true`, `active: false`, and the exact `confirm` phrase for public test files. Hidden draft/private files may be uploaded active when the intended result is an installable private build.
 5. Promote a tested public file separately. New public mod files should be uploaded inactive first.
 
 Example upload arguments:
